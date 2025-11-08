@@ -4,8 +4,6 @@ from gluonts.nursery.few_shot_prediction.src.meta.metrics.crps import CRPS
 
 
 quantiles = (np.arange(20)/20.0)[1:]
-crps_quantile = CRPS(quantiles=quantiles)
-
 
 def crps_quantile_sum(pred, truth):
     """
@@ -14,7 +12,7 @@ def crps_quantile_sum(pred, truth):
     :param truth: (time, batch, feature)
     :return: torch.Tensor holding a float
     """
-
+    crps_quantile = CRPS(quantiles=quantiles).to(pred.device)
     crps_quantile.reset()
     pred = pred.sum(dim=-1)
     truth = truth.sum(dim=-1)
@@ -23,8 +21,8 @@ def crps_quantile_sum(pred, truth):
     pred_quantiles = torch.stack([pred.kthvalue(int(q * pred.shape[0]), dim=0)[0] for q in quantiles], dim=2)
 
     pred_quantiles = pred_quantiles.permute((1, 0, 2))  # (batch, time, quantiles)
-    truth = truth.transpose(0, 1)  # (batch, time)
-    mask = torch.ones_like(truth)
+    truth = truth.transpose(0, 1).contiguous()  # (batch, time)
+    mask = torch.ones_like(truth, device=truth.device)
 
     crps_quantile.update(pred_quantiles, truth, mask)
     return crps_quantile.compute()

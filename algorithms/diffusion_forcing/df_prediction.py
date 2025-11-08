@@ -80,6 +80,8 @@ class DiffusionForcingPrediction(DiffusionForcingBase):
                 all_gt.append(gt.view(gt.shape[0], self.calc_crps_sum, -1, *gt.shape[2:]))
             all_preds = torch.cat(all_preds, 2).float().permute(1, 0, 2, 3)
             gt = torch.cat(all_gt, 2).float()[:, 0]
+            all_preds = all_preds.to(self.device) # move back to gpu 
+            gt = gt.to(self.device) # move back to gpu
             crps_sum_val = crps_quantile_sum(all_preds[:, self.context_frames :], gt[self.context_frames :])
             self.min_crps_sum = min(self.min_crps_sum, crps_sum_val)
             self.log_dict(

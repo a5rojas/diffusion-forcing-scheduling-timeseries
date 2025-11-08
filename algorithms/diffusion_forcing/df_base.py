@@ -164,10 +164,11 @@ class DiffusionForcingBase(BasePytorchAlgo):
     @torch.no_grad()
     def validation_step(self, batch, batch_idx, namespace="validation"):
         if self.calc_crps_sum:
-            # repeat batch for crps sum for time series prediction
-            batch = [d[None].expand(self.calc_crps_sum, *([-1] * len(d.shape))).flatten(0, 1) for d in batch]
+            # repeat batch for crps sum for time series prediction (ensemble); original shape of d is: (b, (t fs), c)
+            batch = [d[None].expand(self.calc_crps_sum, *([-1] * len(d.shape))).flatten(0, 1) for d in batch] # goes to shape (100, b, (t fs), c) --> ((100b), (t fs), c)
 
-        xs, conditions, masks, *_, init_z = self._preprocess_batch(batch)
+        # t is number of chunks and frame stack is number of frames in the chunk, so prod is total length of series
+        xs, conditions, masks, *_, init_z = self._preprocess_batch(batch) # turn shape (b', (t fs), c)) --> (t, b', (fs c))
 
         n_frames, batch_size, *_ = xs.shape
         xs_pred = []
