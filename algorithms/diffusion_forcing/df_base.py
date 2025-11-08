@@ -116,15 +116,15 @@ class DiffusionForcingBase(BasePytorchAlgo):
 
     def training_step(self, batch, batch_idx):
         # training step for dynamics
-        xs, conditions, masks, *_, init_z = self._preprocess_batch(batch)
-
+        xs, conditions, masks, *_, init_z = self._preprocess_batch(batch) # (batch, video length, channels) --> (video length, batch, channels)
+        # n_frames == length of the video
         n_frames, batch_size, _, *_ = xs.shape
 
         xs_pred = []
         loss = []
         z = init_z
         cum_snr = None
-        for t in range(0, n_frames):
+        for t in range(0, n_frames): # iterate over every frame in the video
             deterministic_t = None
             if random() <= self.gt_cond_prob or (t == 0 and random() <= self.gt_first_frame):
                 deterministic_t = 0

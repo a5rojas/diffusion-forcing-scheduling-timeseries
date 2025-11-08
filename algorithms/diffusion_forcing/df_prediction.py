@@ -160,9 +160,17 @@ class DiffusionForcingPrediction(DiffusionForcingBase):
 
         past_time_feat = batch["past_time_feat"]
         future_time_feat = batch["future_time_feat"]
-        past_target_cdf = batch["past_target_cdf"]
+        past_target_cdf = batch["past_target_cdf"] #(?, x_shape)
         future_target_cdf = batch["future_target_cdf"]
         target_dimension_indicator = batch["target_dimension_indicator"]
+
+        # print("===============================Shapes of everything======================================")
+        # print("Past time feat", past_time_feat.shape)
+        # print("Future time feat", future_time_feat.shape)
+        # print("Past target cdf", past_target_cdf.shape)
+        # print("Future target cdf", future_target_cdf.shape)
+        # print("Target dimension indicator", target_dimension_indicator.shape)
+        # print("========================================================================================")
 
         target_dim = past_target_cdf.shape[-1]
         assert target_dim == self.x_shape[0]
@@ -174,6 +182,7 @@ class DiffusionForcingPrediction(DiffusionForcingBase):
             else:
                 # training
                 sequence = torch.cat((past_target_cdf, future_target_cdf), dim=1)
+            # (b, context + pred, ...)
             observations = sequence[:, -(self.context_frames + self.prediction_length) :, ...]
             return observations, None
 

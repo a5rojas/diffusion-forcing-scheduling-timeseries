@@ -109,7 +109,7 @@ def run_local(cfg: DictConfig):
     # launch experiment
     experiment = build_experiment(cfg, logger, checkpoint_path)
     for task in cfg.experiment.tasks:
-        experiment.exec_task(task)
+        experiment.exec_task(task) # ["training", ...]
 
 
 def run_slurm(cfg: DictConfig):
