@@ -147,6 +147,7 @@ class DiffusionForcingPrediction(DiffusionForcingBase):
             end_index = -lag_index if lag_index > 0 else None
             if lag_index == 0:
                 observations = sequence[:, begin_index:end_index, ...]
+                lagged_values.append(torch.zeros_like(sequence[:, begin_index:end_index, ...].unsqueeze(1))) # to make sure that lv is not empty which was causing an error
             else:
                 lagged_values.append(sequence[:, begin_index:end_index, ...].unsqueeze(1))
         return observations, torch.cat(lagged_values, dim=1).permute(0, 2, 3, 1)

@@ -415,7 +415,7 @@ class DiffusionTransitionModel(nn.Module):
     def ddim_sample_step(
         self, x, z_cond, external_cond=None, index=0, return_x_start=False, return_guidance_const=False
     ):
-        if index == 0:
+        if index == 0: # the entry in the denoising scheduler 
             x = torch.clamp(x, -self.clip_noise, self.clip_noise)
 
         batch, device, total_timesteps, sampling_timesteps, eta = (

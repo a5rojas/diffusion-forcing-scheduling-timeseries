@@ -163,100 +163,120 @@ class DiffusionForcingBase(BasePytorchAlgo):
 
     @torch.no_grad()
     def validation_step(self, batch, batch_idx, namespace="validation"):
-        if self.calc_crps_sum:
+        num_crps = getattr(self, "calc_crps_sum", 1)
+        group_size = min(4, num_crps)  # process ensembles in groups to save memory
+
+        all_preds, all_targets = [], []
+
+        # loop over CRPS ensemble groups instead of expanding everything at once
+        for start in range(0, num_crps, group_size):
             # repeat batch for crps sum for time series prediction (ensemble); original shape of d is: (b, (t fs), c)
-            batch = [d[None].expand(self.calc_crps_sum, *([-1] * len(d.shape))).flatten(0, 1) for d in batch] # goes to shape (100, b, (t fs), c) --> ((100b), (t fs), c)
-
-        # t is number of chunks and frame stack is number of frames in the chunk, so prod is total length of series
-        xs, conditions, masks, *_, init_z = self._preprocess_batch(batch) # turn shape (b', (t fs), c)) --> (t, b', (fs c))
-
-        n_frames, batch_size, *_ = xs.shape
-        xs_pred = []
-        xs_pred_all = []
-        z = init_z
-
-        # context
-        for t in range(0, self.context_frames // self.frame_stack):
-            z, x_next_pred, _, _ = self.transition_model(z, xs[t], conditions[t], deterministic_t=0)
-            xs_pred.append(x_next_pred)
-
-        # prediction
-        while len(xs_pred) < n_frames:
-            if self.chunk_size > 0:
-                horizon = min(n_frames - len(xs_pred), self.chunk_size)
-            else:
-                horizon = n_frames - len(xs_pred)
-
-            chunk = [
-                torch.randn((batch_size,) + tuple(self.x_stacked_shape), device=self.device) for _ in range(horizon)
+            # goes to shape (group_size, b, (t fs), c) --> ((group_size*b), (t fs), c)
+            batch_expanded = [
+                d[None].expand(group_size, *([-1] * len(d.shape))).flatten(0, 1) for d in batch
             ]
 
-            pyramid_height = self.sampling_timesteps + int(horizon * self.uncertainty_scale)
-            pyramid = np.zeros((pyramid_height, horizon), dtype=int)
-            for m in range(pyramid_height):
-                for t in range(horizon):
-                    pyramid[m, t] = m - int(t * self.uncertainty_scale)
-            pyramid = np.clip(pyramid, a_min=0, a_max=self.sampling_timesteps, dtype=int)
+            # t is number of chunks and frame stack is number of frames in the chunk, so prod is total length of series
+            xs, conditions, masks, *_, init_z = self._preprocess_batch(batch_expanded)  # turn shape (b', (t fs), c)) --> (t, b', (fs c))
+            n_frames, batch_size, *_ = xs.shape  # (t, b', ...)
+            xs_pred = []
+            xs_pred_all = []
+            z = init_z
 
-            for m in range(pyramid_height):
+            # context
+            for t in range(0, self.context_frames // self.frame_stack):
+                z, x_next_pred, _, _ = self.transition_model(z, xs[t], conditions[t], deterministic_t=0)  # over the whole batch
+                xs_pred.append(x_next_pred)
+
+            # prediction
+            while len(xs_pred) < n_frames:  # add chunks until we get there... (n_frames already factored so that chunks * n_frames = total length)
+                if self.chunk_size > 0:  # determine how far out we will forecast for this new chunk
+                    horizon = min(n_frames - len(xs_pred), self.chunk_size)
+                else:
+                    horizon = n_frames - len(xs_pred)
+                # this is the thing that we will fill in with our predictions; starts as fully random diffusion model prior!
+                chunk = [
+                    torch.randn((batch_size,) + tuple(self.x_stacked_shape), device=self.device) for _ in range(horizon)
+                ]
+                # build pyramid
+                pyramid_height = self.sampling_timesteps + int(horizon * self.uncertainty_scale)
+                pyramid = np.zeros((pyramid_height, horizon), dtype=int)
+                for m in range(pyramid_height):
+                    for t in range(horizon):
+                        pyramid[m, t] = m - int(t * self.uncertainty_scale)
+                pyramid = np.clip(pyramid, a_min=0, a_max=self.sampling_timesteps, dtype=int)
+                # walk down the pyramid
+                for m in range(pyramid_height):
+                    if self.transition_model.return_all_timesteps:
+                        xs_pred_all.append(chunk)
+
+                    z_chunk = z.detach()
+                    for t in range(horizon):
+                        i = min(pyramid[m, t], self.sampling_timesteps - 1)
+
+                        chunk[t], z_chunk = self.transition_model.ddim_sample_step(
+                            chunk[t], z_chunk, conditions[len(xs_pred) + t], i
+                        )
+
+                        # theoretically, one shall feed new chunk[t] with last z_chunk into transition model again
+                        # to get the posterior z_chunk, and optionaly, with small noise level k>0 for stablization.
+                        # However, since z_chunk in the above line already contains info about updated chunk[t] in
+                        # our simplied math model, we deem it suffice to directly take this z_chunk estimated from
+                        # last z_chunk and noiser chunk[t]. This saves half of the compute from posterior steps.
+                        # The effect of the above simplification already contains stablization: we always stablize
+                        # (ddim_sample_step is never called with noise level k=0 above)
+
+                z = z_chunk
+                xs_pred += chunk
+
+            xs_pred = torch.stack(xs_pred)
+            loss = F.mse_loss(xs_pred, xs, reduction="none")
+            loss = self.reweigh_loss(loss, masks)
+
+            xs = rearrange(xs, "t b (fs c) ... -> (t fs) b c ...", fs=self.frame_stack)
+            xs_pred = rearrange(xs_pred, "t b (fs c) ... -> (t fs) b c ...", fs=self.frame_stack)
+
+            xs = self._unnormalize_x(xs)
+            xs_pred = self._unnormalize_x(xs_pred)
+
+            if not self.is_spatial:
                 if self.transition_model.return_all_timesteps:
-                    xs_pred_all.append(chunk)
-
-                z_chunk = z.detach()
-                for t in range(horizon):
-                    i = min(pyramid[m, t], self.sampling_timesteps - 1)
-
-                    chunk[t], z_chunk = self.transition_model.ddim_sample_step(
-                        chunk[t], z_chunk, conditions[len(xs_pred) + t], i
-                    )
-
-                    # theoretically, one shall feed new chunk[t] with last z_chunk into transition model again 
-                    # to get the posterior z_chunk, and optionaly, with small noise level k>0 for stablization. 
-                    # However, since z_chunk in the above line already contains info about updated chunk[t] in 
-                    # our simplied math model, we deem it suffice to directly take this z_chunk estimated from 
-                    # last z_chunk and noiser chunk[t]. This saves half of the compute from posterior steps. 
-                    # The effect of the above simplification already contains stablization: we always stablize 
-                    # (ddim_sample_step is never called with noise level k=0 above)
-
-            z = z_chunk
-            xs_pred += chunk
-
-        xs_pred = torch.stack(xs_pred)
-        loss = F.mse_loss(xs_pred, xs, reduction="none")
-        loss = self.reweigh_loss(loss, masks)
-
-        xs = rearrange(xs, "t b (fs c) ... -> (t fs) b c ...", fs=self.frame_stack)
-        xs_pred = rearrange(xs_pred, "t b (fs c) ... -> (t fs) b c ...", fs=self.frame_stack)
-
-        xs = self._unnormalize_x(xs)
-        xs_pred = self._unnormalize_x(xs_pred)
-
-        if not self.is_spatial:
-            if self.transition_model.return_all_timesteps:
-                xs_pred_all = [torch.stack(item) for item in xs_pred_all]
-                limit = self.transition_model.sampling_timesteps
-                for i in np.linspace(1, limit, 5, dtype=int):
-                    xs_pred = xs_pred_all[i]
-                    xs_pred = self._unnormalize_x(xs_pred)
+                    xs_pred_all = [torch.stack(item) for item in xs_pred_all]
+                    limit = self.transition_model.sampling_timesteps
+                    for i in np.linspace(1, limit, 5, dtype=int):
+                        xs_pred = xs_pred_all[i]
+                        xs_pred = self._unnormalize_x(xs_pred)
+                        metric_dict = get_validation_metrics_for_states(xs_pred, xs)
+                        self.log_dict(
+                            {f"{namespace}/{i}_sampling_steps_{k}": v for k, v in metric_dict.items()},
+                            on_step=False,
+                            on_epoch=True,
+                            prog_bar=True,
+                        )
+                else:
                     metric_dict = get_validation_metrics_for_states(xs_pred, xs)
                     self.log_dict(
-                        {f"{namespace}/{i}_sampling_steps_{k}": v for k, v in metric_dict.items()},
+                        {f"{namespace}/{k}": v for k, v in metric_dict.items()},
                         on_step=False,
                         on_epoch=True,
                         prog_bar=True,
                     )
-            else:
-                metric_dict = get_validation_metrics_for_states(xs_pred, xs)
-                self.log_dict(
-                    {f"{namespace}/{k}": v for k, v in metric_dict.items()},
-                    on_step=False,
-                    on_epoch=True,
-                    prog_bar=True,
-                )
 
-        self.validation_step_outputs.append((xs_pred.detach().cpu(), xs.detach().cpu()))
+            # detach + move to CPU to free GPU
+            all_preds.append(xs_pred.detach().cpu())
+            all_targets.append(xs.detach().cpu())
+
+            # clean GPU memory between groups
+            del xs, xs_pred, z, chunk
+            torch.cuda.empty_cache()
+
+        # combine group results
+        all_preds = torch.cat(all_preds, dim=0)[:num_crps]  # trim if not divisible by group_size
+        all_targets = all_targets[0]
+        self.validation_step_outputs.append((all_preds, all_targets))
 
         return loss
+
 
     def on_validation_epoch_end(self, namespace="validation"):
         if not self.validation_step_outputs:
