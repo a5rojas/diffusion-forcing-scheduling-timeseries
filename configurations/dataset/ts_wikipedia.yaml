@@ -3,3 +3,4 @@ defaults:
 
 name: ts_wikipedia
 gluonts_name: wiki-rolling_nips
+crps_group_size: 4

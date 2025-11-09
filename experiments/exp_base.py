@@ -68,7 +68,11 @@ class BaseExperiment(ABC):
                 "Make sure you define compatible_algorithms correctly and make sure that each key has "
                 "same name as yaml file under '[project_root]/configurations/algorithm' without .yaml suffix"
             )
-        return self.compatible_algorithms[algo_name](self.root_cfg.algorithm)
+        algo_cfg = self.root_cfg.algorithm
+        if "dataset" in self.root_cfg and "crps_group_size" in self.root_cfg.dataset:
+            algo_cfg.crps_group_size = self.root_cfg.dataset.crps_group_size
+        
+        return self.compatible_algorithms[algo_name](algo_cfg)
 
     def exec_task(self, task: str) -> None:
         """

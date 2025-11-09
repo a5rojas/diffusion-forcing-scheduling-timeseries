@@ -42,6 +42,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         self.validation_step_outputs = []
         self.min_crps_sum = float("inf")
         self.learnable_init_z = cfg.learnable_init_z
+        self.crps_group_size = getattr(cfg, "crps_group_size", None)
 
         super().__init__(cfg)
 
@@ -164,7 +165,10 @@ class DiffusionForcingBase(BasePytorchAlgo):
     @torch.no_grad()
     def validation_step(self, batch, batch_idx, namespace="validation"):
         num_crps = getattr(self, "calc_crps_sum", 1)
-        group_size = min(4, num_crps)  # process ensembles in groups to save memory
+        if self.crps_group_size is not None:
+            group_size = min(self.crps_group_size, num_crps)  # process ensembles in groups to save memory
+        else:
+            group_size = num_crps
 
         all_preds, all_targets = [], []
 

@@ -3,3 +3,4 @@ defaults:
 
 name: ts_traffic
 gluonts_name: traffic_nips
+crps_group_size: 4

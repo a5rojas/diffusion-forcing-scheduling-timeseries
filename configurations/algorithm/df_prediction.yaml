@@ -6,6 +6,7 @@ metadata: ${dataset.metadata}
 lr: 3e-4
 weight_decay: 1e-3
 use_covariates: True
+crps_group_size: null
 
 diffusion:
   network_size: 64

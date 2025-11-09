@@ -3,3 +3,4 @@ defaults:
 
 name: ts_taxi
 gluonts_name: taxi_30min
+crps_group_size: 4
