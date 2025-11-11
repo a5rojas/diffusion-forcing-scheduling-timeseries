@@ -164,7 +164,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
 
     @torch.no_grad()
     def validation_step(self, batch, batch_idx, namespace="validation"):
-        num_crps = getattr(self, "calc_crps_sum", 1)
+        num_crps = getattr(self, "calc_crps_sum", 100)
         if self.crps_group_size is not None:
             group_size = min(self.crps_group_size, num_crps)  # process ensembles in groups to save memory
         else:
@@ -172,17 +172,14 @@ class DiffusionForcingBase(BasePytorchAlgo):
 
         all_preds, all_targets = [], []
 
-        # loop over CRPS ensemble groups instead of expanding everything at once
-        for start in range(0, num_crps, group_size):
-            # repeat batch for crps sum for time series prediction (ensemble); original shape of d is: (b, (t fs), c)
-            # goes to shape (group_size, b, (t fs), c) --> ((group_size*b), (t fs), c)
+        for _ in range(0, num_crps, group_size):
             batch_expanded = [
-                d[None].expand(group_size, *([-1] * len(d.shape))).flatten(0, 1) for d in batch
-            ]
+                d[None].expand(group_size, *([-1] * len(d.shape))).flatten(0, 1) for d in batch # repeat batch for crps sum for time series prediction (ensemble); original shape of d is: (b, (t fs), c)
+            ] # goes to shape (group_size, b, (t fs), c) --> ((group_size*b), (t fs), c)
 
-            # t is number of chunks and frame stack is number of frames in the chunk, so prod is total length of series
+            
             xs, conditions, masks, *_, init_z = self._preprocess_batch(batch_expanded)  # turn shape (b', (t fs), c)) --> (t, b', (fs c))
-            n_frames, batch_size, *_ = xs.shape  # (t, b', ...)
+            n_frames, batch_size, *_ = xs.shape  # (t, b', ...) where t is number of chunks and frame stack is number of frames in the chunk, so prod=t*fs is total length of series
             xs_pred = []
             xs_pred_all = []
             z = init_z
