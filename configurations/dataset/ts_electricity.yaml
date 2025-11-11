@@ -3,4 +3,3 @@ defaults:
 
 name: ts_electricity
 gluonts_name: electricity_nips
-crps_group_size: 4
