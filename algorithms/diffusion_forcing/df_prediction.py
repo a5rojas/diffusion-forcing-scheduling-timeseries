@@ -58,13 +58,11 @@ class DiffusionForcingPrediction(DiffusionForcingBase):
     @torch.no_grad()
     def validation_step(self, batch, batch_idx, namespace="validation"):
         batch = list(self.get_observations_from_gluonts_dataset(batch))
-
-        if self.calc_crps_sum:
-            batch = [repeat(d, "b ... -> (c b) ...", c=self.calc_crps_sum) for d in batch if d is not None]
-
+        batch = [d for d in batch if d is not None]
+        # if self.calc_crps_sum:
+        #     batch = [repeat(d, "b ... -> (c b) ...", c=self.calc_crps_sum) for d in batch if d is not None]
         nonterminals = torch.ones(batch[0].shape[0], batch[0].shape[1]).to(self.device)
         batch.append(nonterminals)
-
         return super().validation_step(batch, batch_idx, namespace=namespace)
 
     def on_validation_epoch_end(self, namespace="validation", log_visualizations=False) -> None:
