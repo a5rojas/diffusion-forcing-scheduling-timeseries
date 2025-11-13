@@ -415,7 +415,7 @@ class DiffusionTransitionModel(nn.Module):
     def ddim_sample_step(
         self, x, z_cond, external_cond=None, index=0, return_x_start=False, return_guidance_const=False
     ):
-        if index == 0: # the entry in the denoising scheduler 
+        if index == 0: # the entry in the denoising scheduler -- this is when we start denoising
             x = torch.clamp(x, -self.clip_noise, self.clip_noise)
 
         batch, device, total_timesteps, sampling_timesteps, eta = (
@@ -433,7 +433,7 @@ class DiffusionTransitionModel(nn.Module):
 
         x = x.to(device)
 
-        time, time_next = time_pairs[index]
+        time, time_next = time_pairs[index] # so index=0 maps to (T-1, T-2)
         time_cond = torch.full((batch,), time, device=device, dtype=torch.long)
         self_cond = None
         model_pred = self.model_predictions(x, time_cond, z_cond, external_cond=external_cond, x_self_cond=self_cond)
@@ -462,3 +462,153 @@ class DiffusionTransitionModel(nn.Module):
         if return_guidance_const:
             result.append(guidance_scale)
         return result
+    
+    def ddim_sample_step_vecind(
+        self, x, z_cond, external_cond=None, index_vec=None,
+        return_x_start=False, return_guidance_const=False
+    ):
+
+        # -----------------------------
+        # 1. Vectorwise clamping
+        # -----------------------------
+        mask = (index_vec == 0).view(-1, *([1] * (x.dim() - 1)))
+        x_clamped = torch.clamp(x, -self.clip_noise, self.clip_noise)
+        x = torch.where(mask, x_clamped, x)
+
+        batch, device = x.shape[0], self.betas.device
+        total_timesteps = self.num_timesteps
+        sampling_timesteps = self.sampling_timesteps
+        eta = self.ddim_sampling_eta
+
+        # -----------------------------
+        # 2. Build time schedule (same)
+        # -----------------------------
+        times = torch.linspace(-1, total_timesteps - 1, steps=sampling_timesteps + 1)
+        times = list(reversed(times.int().tolist()))
+        time_pairs = list(zip(times[:-1], times[1:]))
+
+        # convert to tensor for vector indexing
+        time_pairs_tensor = torch.tensor(time_pairs, device=device, dtype=torch.long)
+
+        # -----------------------------
+        # 3. Per-sample (time, time_next)
+        # -----------------------------
+        time_and_next = time_pairs_tensor[index_vec]   # [B, 2]
+        time = time_and_next[:, 0]        # [B]
+        time_next = time_and_next[:, 1]   # [B]
+
+        # -----------------------------
+        # 4. Model prediction
+        # -----------------------------
+        time_cond = time # can now just overwrite because has shape [B]
+        model_pred = self.model_predictions(
+            x, time_cond, z_cond, external_cond=external_cond, x_self_cond=None
+        )
+
+        pred_noise = model_pred.pred_noise
+        x_start = model_pred.pred_x_start
+        pred_z = model_pred.pred_z
+
+        # -----------------------------
+        # 5. Vectorize DDIM update
+        # -----------------------------
+
+        # mask for which samples are at the "final" step
+        done_mask = (time_next < 0).view(batch, *([1] * (x.dim() - 1)))
+
+        # safe indexing: for done entries, clamp index to 0 so gather won't crash
+        safe_time_next = time_next.clamp(min=0)
+
+        alpha = self.alphas_cumprod[time]              # [B]
+        alpha_next = self.alphas_cumprod[safe_time_next]  # [B] but bogus for done entries (ignored)
+
+        # reshape to broadcast over x
+        alpha = alpha.view(batch, *([1] * (x.dim() - 1)))
+        alpha_next = alpha_next.view(batch, *([1] * (x.dim() - 1)))
+
+        # sigma, c
+        sigma = eta * ((1 - alpha / alpha_next) * (1 - alpha_next) / (1 - alpha)).sqrt()
+        c = (1 - alpha_next - sigma**2).sqrt()
+
+        # guidance scale (vectorized)
+        guidance_scale = (1 - alpha) - c * (1 - alpha).sqrt()
+
+        # noise
+        noise = torch.randn_like(x).clamp(-self.clip_noise, self.clip_noise)
+
+        # DDIM update: per-sample
+        x_updated = (
+            x_start * alpha_next.sqrt() +
+            c * pred_noise +
+            sigma * noise
+        )
+
+        # for samples where time_next == -1 → x = x_start
+        x = torch.where(done_mask, x_start, x_updated)
+
+        # -----------------------------
+        # 6. Return
+        # -----------------------------
+        result = [x, pred_z]
+        if return_x_start:
+            result.append(x_start)
+        if return_guidance_const:
+            result.append(guidance_scale)
+
+        return result
+
+class DiffusionStepPolicy(nn.Module):
+    """
+    Small categorical policy + value network for diffusion step control.
+    Uses embedding for discrete noise index consistent with diffusion cfg.
+    """
+    def __init__(self, x_shape, z_shape, cfg):
+        super().__init__()
+        self.cfg = cfg
+        self.x_shape = x_shape
+        self.z_shape = z_shape
+        self.num_actions = cfg.schedule_matrix.actions  # interpret as {-1, 0, 1} for 3
+
+        self._build_model()
+
+    def _build_model(self):
+        x_channel = self.x_shape[0]
+        z_channel = self.z_shape[0]
+        emb_dim = 32  # small latent code for timestep embedding
+        hidden_dim = 128
+
+        # Embedding for diffusion timesteps (adapts to cfg.diffusion.sampling_timesteps)
+        self.noise_emb = nn.Embedding(self.cfg.diffusion.sampling_timesteps, emb_dim)
+
+        # Encoders for x and z
+        self.x_enc = nn.Linear(x_channel, hidden_dim)
+        self.z_enc = nn.Linear(z_channel, hidden_dim)
+
+        # Heads
+        self.policy_head = nn.Sequential(
+            nn.ReLU(),
+            nn.Linear(hidden_dim * 2 + emb_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, self.num_actions),
+        )
+        self.value_head = nn.Sequential(
+            nn.ReLU(),
+            nn.Linear(hidden_dim * 2 + emb_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1),
+        )
+
+    def forward(self, x, z, noise_idx):
+        """
+        x: (batch, x_dim)
+        z: (batch, z_dim)
+        noise_idx: (batch,) long tensor of diffusion-step indices
+        """
+        x_h = self.x_enc(x)
+        z_h = self.z_enc(z)
+        i_h = self.noise_emb(noise_idx)
+        h = torch.cat([x_h, z_h, i_h], dim=-1)
+
+        logits = self.policy_head(h)
+        value = self.value_head(h).squeeze(-1)
+        return logits, value
