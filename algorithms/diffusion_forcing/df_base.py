@@ -216,11 +216,17 @@ class DiffusionForcingBase(BasePytorchAlgo):
 
                 z_chunk = z.detach()
                 for t in range(horizon):
+                    print("Starting i is ")
                     i = min(pyramid[m, t], self.sampling_timesteps - 1)
+                    print(i)
                     i_vecind = torch.full((batch_size,), i, device=z_chunk.device).long() # changed for testing new ddim
+                    print("Leading to vecind")
+                    print(i_vecind[:3])
                     chunk[t], z_chunk = self.transition_model.ddim_sample_step_vecind(
                         chunk[t], z_chunk, conditions[len(xs_pred) + t], i_vecind
                     )
+
+                    print("the new chunk t is ", chunk[t][:3])
 
                     # theoretically, one shall feed new chunk[t] with last z_chunk into transition model again 
                     # to get the posterior z_chunk, and optionaly, with small noise level k>0 for stablization. 
@@ -296,6 +302,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         On-policy training
         May need to take in optimizer.
         """
+        batch = [b.to(self.device) if torch.is_tensor(b) else b for b in batch]
         deltas = self.deltas.to(self.device).long()
         if self.calc_crps_sum:
             batch_expanded = [d[None].expand(self.calc_crps_sum, *([-1] * len(d.shape))).flatten(0, 1) for d in batch]
@@ -319,6 +326,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         # 1. Context frames (no RL)
         # --------------------------------------------------
         for t in range(self.context_frames // self.frame_stack):
+            print("Test to see if this is on the GPU")
             z, x_next_pred, _, _ = self.transition_model(z, xs[t], conditions[t], deterministic_t=0)
             xs_pred.append(x_next_pred)
 
@@ -340,25 +348,27 @@ class DiffusionForcingBase(BasePytorchAlgo):
             decision_tracker = torch.zeros(batch_size, device=self.device, dtype=torch.long) # what noise level is everything at right now; bounded 0<=dt< num_sampling_steps; in next version add horizon dimension
             max_idx = self.sampling_timesteps - 1
             for m in range(max_rl_steps): # ensures max num of rl steps finite
+                print(f"Taking RL step {m}")
                 if torch.all(decision_tracker >= max_idx):
                     break
                 if self.transition_model.return_all_timesteps: # can keep these lines
                     xs_pred_all.append(chunk)
                 z_chunk = z.detach() # can keep detachment
                 for t in range(horizon):
-                    
                     # get logits for the informed schedule
-                    noise_idx = decision_tracker.long()
+                    noise_idx = decision_tracker.long().to(device=self.device)
+                    print("Noise idx looks like", noise_idx)
                     logits, value = self.matrix_model(chunk[t], z_chunk, noise_idx)
                     dist = Categorical(logits=logits)
 
                     # sample a decision, append the results
                     action = dist.sample()
+                    print("Actions ", action)
                     log_prob = dist.log_prob(action)
                     log_probs.append(log_prob)
                     entropies.append(dist.entropy())
                     action_delta = deltas.to(self.device)[action]
-
+                    print("Actions mapped to ", action_delta)
                     # need latter three to be disjoint
                     can_denoise = (decision_tracker < max_idx)
                     denoise_step = (action_delta > 0) & can_denoise
@@ -381,12 +391,20 @@ class DiffusionForcingBase(BasePytorchAlgo):
                     )
 
                     # keep non-updated the same noise level (option to hold value or resample)
+                    print("The predicted chunk t is ", new_chunk_t[:5, :])
                     chunk[t] = torch.where(denoise_step_mask_x, new_chunk_t, chunk[t])
                     z_chunk = torch.where(denoise_step_mask_z, new_chunk_z, z_chunk)
 
                     # update the decision tracker
                     decision_tracker = decision_tracker + action_delta
                     decision_tracker = decision_tracker.clamp(0, max_idx)
+
+                    # hygiene
+                    del new_chunk_t, new_chunk_z
+                    del noise_idx, action_delta
+                    del denoise_step_mask_x, denoise_step_mask_z
+                    del flat_step_mask_x, flat_step_mask_z
+                    torch.cuda.empty_cache()
 
                 z = z_chunk
             xs_pred += chunk
@@ -426,5 +444,11 @@ class DiffusionForcingBase(BasePytorchAlgo):
 
         return {"xs_pred": self._unnormalize_x(rearrange(xs_pred, "t b (fs c) ... -> (t fs) b c ...", fs=self.frame_stack)),
                 "loss": loss}
-
-                        
+    @property
+    def device(self):
+        ''' TEMPORARY -- WWHEN OVERHAUL PL NEED TO REMOVE'''
+        try:
+            return next(self.parameters()).device
+        except StopIteration:
+            # no parameters — fallback
+            return torch.device("cpu")

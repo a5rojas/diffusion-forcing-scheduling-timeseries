@@ -170,11 +170,11 @@ class DiffusionForcingPrediction(DiffusionForcingBase):
         https://github.com/zalandoresearch/pytorch-ts/blob/master/pts/model/time_grad/time_grad_network.py
         """
 
-        past_time_feat = batch["past_time_feat"]
-        future_time_feat = batch["future_time_feat"]
-        past_target_cdf = batch["past_target_cdf"] #(?, x_shape)
-        future_target_cdf = batch["future_target_cdf"]
-        target_dimension_indicator = batch["target_dimension_indicator"]
+        past_time_feat = batch["past_time_feat"].to(self.device)
+        future_time_feat = batch["future_time_feat"].to(self.device)
+        past_target_cdf = batch["past_target_cdf"].to(self.device) #(?, x_shape)
+        future_target_cdf = batch["future_target_cdf"].to(self.device)
+        target_dimension_indicator = batch["target_dimension_indicator"].to(self.device)
 
         # print("===============================Shapes of everything======================================")
         # print("Past time feat", past_time_feat.shape)

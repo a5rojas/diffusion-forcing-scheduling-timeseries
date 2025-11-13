@@ -276,6 +276,7 @@ class BaseLightningExperiment(BaseExperiment):
         """Implement K training"""
         if not self.algo:
             self.algo = self._build_algo()
+            self.algo = self.algo.to('cuda')
         if self.cfg.training_schedule_matrix.compile:
             self.algo = torch.compile(self.algo)
 
