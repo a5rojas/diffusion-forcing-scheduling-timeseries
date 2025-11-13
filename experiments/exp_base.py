@@ -111,7 +111,7 @@ class BaseLightningExperiment(BaseExperiment):
         if self.logger:
             callbacks.append(LearningRateMonitor("step", True))
 
-    def _build_training_loader(self) -> Optional[Union[TRAIN_DATALOADERS, pl.LightningDataModule]]:
+    def _build_training_loader(self, batch_size_mod:int = 0) -> Optional[Union[TRAIN_DATALOADERS, pl.LightningDataModule]]:
         train_dataset = self._build_dataset("training")
         shuffle = (
             False if isinstance(train_dataset, torch.utils.data.IterableDataset) else self.cfg.training.data.shuffle
@@ -119,7 +119,7 @@ class BaseLightningExperiment(BaseExperiment):
         if train_dataset:
             return torch.utils.data.DataLoader(
                 train_dataset,
-                batch_size=self.cfg.training.batch_size,
+                batch_size=self.cfg.training.batch_size if batch_size_mod == 0 else batch_size_mod,
                 num_workers=min(os.cpu_count(), self.cfg.training.data.num_workers),
                 shuffle=shuffle,
                 persistent_workers=True,
@@ -127,7 +127,7 @@ class BaseLightningExperiment(BaseExperiment):
         else:
             return None
 
-    def _build_validation_loader(self) -> Optional[Union[TRAIN_DATALOADERS, pl.LightningDataModule]]:
+    def _build_validation_loader(self, batch_size_mod:int = 0) -> Optional[Union[TRAIN_DATALOADERS, pl.LightningDataModule]]:
         validation_dataset = self._build_dataset("validation")
         shuffle = (
             False
@@ -137,7 +137,7 @@ class BaseLightningExperiment(BaseExperiment):
         if validation_dataset:
             return torch.utils.data.DataLoader(
                 validation_dataset,
-                batch_size=self.cfg.validation.batch_size,
+                batch_size=self.cfg.validation.batch_size if batch_size_mod == 0 else batch_size_mod,
                 num_workers=min(os.cpu_count(), self.cfg.validation.data.num_workers),
                 shuffle=shuffle,
                 persistent_workers=True,
@@ -272,8 +272,79 @@ class BaseLightningExperiment(BaseExperiment):
             ckpt_path=self.best_model_path if hasattr(self, "best_model_path") else self.ckpt_path,
         )
 
+    def training_schedule_matrix(self) -> None:
+        """Implement K training"""
+        if not self.algo:
+            self.algo = self._build_algo()
+        if self.cfg.training_schedule_matrix.compile:
+            self.algo = torch.compile(self.algo)
+
+        if self.ckpt_path and "training" not in self.cfg.tasks:
+           self._load_algo_from_ckpt()
+        else:
+            raise ValueError("If not also concurrently training a model, must pass one in")
+
+        train_dataloader=self._build_training_loader(batch_size_mod=self.cfg.training_schedule_matrix.batch_size)
+        val_dataloader=self._build_validation_loader(batch_size_mod=self.cfg.training_schedule_matrix.batch_size)
+
+        self.policy_opt = torch.optim.Adam(self.algo.matrix_model.parameters(), lr=self.cfg.training_schedule_matrix.lr)
+        self.gamma = self.algo.cfg.schedule_matrix.gamma
+        self.lam = self.algo.cfg.schedule_matrix.lam
+        self.clip_eps = self.algo.cfg.schedule_matrix.clip_eps
+        self.entropy_beta = self.algo.cfg.schedule_matrix.entropy_beta
+
+        for epoch in range(self.cfg.training_schedule_matrix.epochs):
+            for batch_idx, batch in enumerate(train_dataloader):
+                self.policy_opt.zero_grad()
+                out = self.algo.train_k_step(batch, batch_idx)
+                print(f"Got the loss ", out["loss"])
+                self.policy_opt.step()
+                break
+            break
+                # loss.backward()
+                # self.policy_opt.step()
+                # self.policy_opt.zero_grad()
+            # for batch in val_dataloader:
+                # pass
+                # self.algo.evaluate_k(batch)
+
     def _build_dataset(self, split: str) -> Optional[torch.utils.data.Dataset]:
         if split in ["training", "test", "validation"]:
             return self.compatible_datasets[self.root_cfg.dataset._name](self.root_cfg.dataset, split=split)
         else:
             raise NotImplementedError(f"split '{split}' is not implemented")
+        
+    def _load_algo_from_ckpt(self):
+        """Load ONLY the algorithm parameters from a Lightning checkpoint."""
+        ckpt = torch.load(self.ckpt_path, map_location="cpu")
+        sd = ckpt["state_dict"]
+
+        # transition model
+        tm_sd = {
+            k[len("transition_model."):]: v
+            for k, v in sd.items()
+            if k.startswith("transition_model.")
+        }
+        self.algo.transition_model.load_state_dict(tm_sd, strict=True)
+
+        # optional: learnable init_z
+        if self.algo.learnable_init_z:
+            iz_sd = {
+                k[len("init_z."):]: v
+                for k, v in sd.items()
+                if k.startswith("init_z.")
+            }
+            if iz_sd:
+                self.algo.init_z.load_state_dict(iz_sd, strict=True)
+
+        # schedule matrix policy (if present in checkpoint)
+        if hasattr(self.algo, "matrix_model"):
+            pm_sd = {
+                k[len("matrix_model."):]: v
+                for k, v in sd.items()
+                if k.startswith("matrix_model.")
+            }
+            if pm_sd:
+                self.algo.matrix_model.load_state_dict(pm_sd, strict=True)
+
+        print("Loaded algorithm weights from:", self.ckpt_path)

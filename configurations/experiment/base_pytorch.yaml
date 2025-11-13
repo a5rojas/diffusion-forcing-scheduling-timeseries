@@ -46,3 +46,10 @@ test:
   data:
     num_workers: 16 # number of CPU threads for data preprocessing, for test.
     shuffle: False # whether test data will be shuffled
+
+training_schedule_matrix:
+  compile: False
+  epochs: 10
+  lr: 1e-4
+  precision: 16-mixed
+  batch_size: 32

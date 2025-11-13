@@ -33,7 +33,7 @@ class SequencePredictionExperiment(BaseLightningExperiment):
         ts_traffic=GluontsDataset,
     )
 
-    def _build_training_loader(self) -> Optional[Union[TRAIN_DATALOADERS, LightningDataModule, TrainDataLoader]]:
+    def _build_training_loader(self, batch_size_mod:int = 0) -> Optional[Union[TRAIN_DATALOADERS, LightningDataModule, TrainDataLoader]]:
         train_dataset = self._build_dataset("training")
         shuffle = (
             False if isinstance(train_dataset, torch.utils.data.IterableDataset) else self.cfg.training.data.shuffle
@@ -43,7 +43,7 @@ class SequencePredictionExperiment(BaseLightningExperiment):
                 train_dataloader = TrainDataLoader(
                     train_dataset.dataset,
                     transform=train_dataset.transformation,
-                    batch_size=self.cfg.training.batch_size,
+                    batch_size=self.cfg.training.batch_size if batch_size_mod == 0 else batch_size_mod,
                     stack_fn=batchify,
                     num_batches_per_epoch=100,
                     shuffle_buffer_length=2048,
@@ -52,14 +52,14 @@ class SequencePredictionExperiment(BaseLightningExperiment):
             else:
                 return torch.utils.data.DataLoader(
                     train_dataset,
-                    batch_size=self.cfg.training.batch_size,
+                    batch_size=self.cfg.training.batch_size if batch_size_mod == 0 else batch_size_mod,
                     num_workers=min(os.cpu_count(), self.cfg.training.data.num_workers),
                     shuffle=shuffle,
                 )
         else:
             return None
 
-    def _build_validation_loader(self) -> Optional[Union[TRAIN_DATALOADERS, LightningDataModule, InferenceDataLoader]]:
+    def _build_validation_loader(self, batch_size_mod:int = 0) -> Optional[Union[TRAIN_DATALOADERS, LightningDataModule, InferenceDataLoader]]:
         validation_dataset = self._build_dataset("validation")
         shuffle = (
             False
@@ -71,20 +71,20 @@ class SequencePredictionExperiment(BaseLightningExperiment):
                 return InferenceDataLoader(
                     validation_dataset.dataset,
                     transform=validation_dataset.transformation,
-                    batch_size=self.cfg.validation.batch_size,
+                    batch_size=self.cfg.validation.batch_size if batch_size_mod == 0 else batch_size_mod,
                     stack_fn=batchify,
                 )
             else:
                 return torch.utils.data.DataLoader(
                     validation_dataset,
-                    batch_size=self.cfg.validation.batch_size,
+                    batch_size=self.cfg.validation.batch_size if batch_size_mod == 0 else batch_size_mod,
                     num_workers=min(os.cpu_count(), self.cfg.validation.data.num_workers),
                     shuffle=shuffle,
                 )
         else:
             return None
 
-    def _build_test_loader(self) -> Optional[InferenceDataLoader]:
+    def _build_test_loader(self, batch_size_mod:int=0) -> Optional[InferenceDataLoader]:
         test_dataset = self._build_dataset("test")
         shuffle = (
             False if isinstance(test_dataset, torch.utils.data.IterableDataset) else self.cfg.validation.data.shuffle
@@ -94,13 +94,13 @@ class SequencePredictionExperiment(BaseLightningExperiment):
                 return InferenceDataLoader(
                     test_dataset.dataset,
                     transform=test_dataset.transformation,
-                    batch_size=self.cfg.test.batch_size,
+                    batch_size=self.cfg.test.batch_size if batch_size_mod == 0 else batch_size_mod,
                     stack_fn=batchify,
                 )
             else:
                 return torch.utils.data.DataLoader(
                     test_dataset,
-                    batch_size=self.cfg.validation.batch_size,
+                    batch_size=self.cfg.validation.batch_size if batch_size_mod == 0 else batch_size_mod,
                     num_workers=min(os.cpu_count(), self.cfg.validation.data.num_workers),
                     shuffle=shuffle,
                 )

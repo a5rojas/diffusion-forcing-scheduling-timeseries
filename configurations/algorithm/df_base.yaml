@@ -38,3 +38,13 @@ diffusion:
   num_mlp_layers: 0
   return_all_timesteps: False
   clip_noise: 20.0
+
+schedule_matrix:
+  actions: 2 # and positive --> [0,1] 3 and negative = [-1, 0, 1] in timedelta, etc. 
+  positive_only: True
+  build: False # whether to actually build the model -- set to true when training
+  gamma: 0.99
+  lam: 0.95
+  clip_eps: 0.25
+  entropy_beta: 0.01
+  rollout_multiple: 1 # multiplier on how much farther beyond og pyramid height that we will allow rollouts
