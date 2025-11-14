@@ -297,8 +297,7 @@ class BaseLightningExperiment(BaseExperiment):
         for epoch in range(self.cfg.training_schedule_matrix.epochs):
             for batch_idx, batch in enumerate(train_dataloader):
                 self.policy_opt.zero_grad()
-                out = self.algo.train_k_step(batch, batch_idx)
-                print(f"Got the loss ", out["loss"])
+                out = self.algo.train_k_step_minimal(batch, batch_idx)
                 self.policy_opt.step()
                 break
             break

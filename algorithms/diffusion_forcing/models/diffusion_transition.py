@@ -488,8 +488,6 @@ class DiffusionTransitionModel(nn.Module):
         times = list(reversed(times.int().tolist()))
         time_pairs = list(zip(times[:-1], times[1:]))
 
-        print("Time pairs", time_pairs[:5])
-
         # convert to tensor for vector indexing
         time_pairs_tensor = torch.tensor(time_pairs, device=device, dtype=torch.long)
 
@@ -499,9 +497,6 @@ class DiffusionTransitionModel(nn.Module):
         time_and_next = time_pairs_tensor[index_vec]   # [B, 2]
         time = time_and_next[:, 0]        # [B]
         time_next = time_and_next[:, 1]   # [B]
-
-        print("Time ", time[:5])
-        print("Time Next ", time_next[:5])
 
         # -----------------------------
         # 4. Model prediction
@@ -532,25 +527,15 @@ class DiffusionTransitionModel(nn.Module):
         alpha = alpha.view(batch, *([1] * (x.dim() - 1)))
         alpha_next = alpha_next.view(batch, *([1] * (x.dim() - 1)))
 
-        print("Alpha: ", alpha[:3])
-        print("Alpha Next: ", alpha_next[:3])
-
         # sigma, c
         sigma = eta * ((1 - alpha / alpha_next) * (1 - alpha_next) / (1 - alpha)).sqrt()
-        print("Sigma is ", sigma[:3])
         c = (1 - alpha_next - sigma**2).sqrt()
-
-        print("c is ", c[:3])
 
         # guidance scale (vectorized)
         guidance_scale = (1 - alpha) - c * (1 - alpha).sqrt()
 
-        print("gc is ", guidance_scale[:3])
-
         # noise
         noise = torch.randn_like(x).clamp(-self.clip_noise, self.clip_noise)
-
-        print("samped noise ", noise[:3])
 
         # DDIM update: per-sample
         x_updated = (

@@ -49,7 +49,7 @@ test:
 
 training_schedule_matrix:
   compile: False
-  epochs: 10
+  epochs: 1
   lr: 1e-4
   precision: 16-mixed
   batch_size: 32

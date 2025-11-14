@@ -65,7 +65,20 @@ class DiffusionForcingPrediction(DiffusionForcingBase):
         batch.append(nonterminals)
         return super().validation_step(batch, batch_idx, namespace=namespace)
     
-    def train_k_step(self, batch, batch_idx, namespace="train_k"):
+    # def train_k_step(self, batch, batch_idx, namespace="train_k"):
+    #     """ 
+    #     On-policy training
+    #     May need to take in optimizer.
+    #     """
+    #     batch = list(self.get_observations_from_gluonts_dataset(batch))
+    #     batch = [d for d in batch if d is not None]
+    #     # if self.calc_crps_sum:
+    #     #     batch = [repeat(d, "b ... -> (c b) ...", c=self.calc_crps_sum) for d in batch if d is not None]
+    #     nonterminals = torch.ones(batch[0].shape[0], batch[0].shape[1]).to(self.device)
+    #     batch.append(nonterminals)
+    #     return super().train_k_step(batch, batch_idx, namespace=namespace)
+    
+    def train_k_step_minimal(self, batch, batch_idx, namespace="train_k_minimal"):
         """ 
         On-policy training
         May need to take in optimizer.
@@ -76,7 +89,7 @@ class DiffusionForcingPrediction(DiffusionForcingBase):
         #     batch = [repeat(d, "b ... -> (c b) ...", c=self.calc_crps_sum) for d in batch if d is not None]
         nonterminals = torch.ones(batch[0].shape[0], batch[0].shape[1]).to(self.device)
         batch.append(nonterminals)
-        return super().train_k_step(batch, batch_idx, namespace=namespace)
+        return super().train_k_step_minimal(batch, batch_idx, namespace=namespace)
 
     def on_validation_epoch_end(self, namespace="validation", log_visualizations=False) -> None:
         if not self.validation_step_outputs:

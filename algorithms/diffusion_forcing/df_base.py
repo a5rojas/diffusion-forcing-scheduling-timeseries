@@ -125,7 +125,6 @@ class DiffusionForcingBase(BasePytorchAlgo):
             expand_dim = len(loss.shape) - len(weight.shape) - 1
             weight = rearrange(weight, "(t fs) b ... -> t b fs ..." + " 1" * expand_dim, fs=self.frame_stack)
             loss = loss * weight
-
         return loss.mean()
 
     def training_step(self, batch, batch_idx):
@@ -150,9 +149,9 @@ class DiffusionForcingBase(BasePytorchAlgo):
             z = z_next
             xs_pred.append(x_next_pred)
             loss.append(l)
-
+        
         xs_pred = torch.stack(xs_pred)
-        loss = torch.stack(loss)
+        loss = torch.stack(loss) # we collected as we went...
         x_loss = self.reweigh_loss(loss, masks)
         loss = x_loss
 
@@ -216,17 +215,12 @@ class DiffusionForcingBase(BasePytorchAlgo):
 
                 z_chunk = z.detach()
                 for t in range(horizon):
-                    print("Starting i is ")
                     i = min(pyramid[m, t], self.sampling_timesteps - 1)
-                    print(i)
+
                     i_vecind = torch.full((batch_size,), i, device=z_chunk.device).long() # changed for testing new ddim
-                    print("Leading to vecind")
-                    print(i_vecind[:3])
                     chunk[t], z_chunk = self.transition_model.ddim_sample_step_vecind(
                         chunk[t], z_chunk, conditions[len(xs_pred) + t], i_vecind
                     )
-
-                    print("the new chunk t is ", chunk[t][:3])
 
                     # theoretically, one shall feed new chunk[t] with last z_chunk into transition model again 
                     # to get the posterior z_chunk, and optionaly, with small noise level k>0 for stablization. 
@@ -240,9 +234,8 @@ class DiffusionForcingBase(BasePytorchAlgo):
             xs_pred += chunk
 
         xs_pred = torch.stack(xs_pred)
-        loss = F.mse_loss(xs_pred, xs, reduction="none")
+        loss = F.mse_loss(xs_pred, xs, reduction="none") # Could not be calcd until we finished rolling out
         loss = self.reweigh_loss(loss, masks)
-
         xs = rearrange(xs, "t b (fs c) ... -> (t fs) b c ...", fs=self.frame_stack)
         xs_pred = rearrange(xs_pred, "t b (fs c) ... -> (t fs) b c ...", fs=self.frame_stack)
 
@@ -297,7 +290,157 @@ class DiffusionForcingBase(BasePytorchAlgo):
         std = self.data_std.reshape(shape).to(xs.device)
         return xs * std + mean
     
-    def train_k_step(self, batch, batch_idx, namespace="train_k"):
+    # def train_k_step(self, batch, batch_idx, namespace="train_k"):
+    #     """ 
+    #     On-policy training
+    #     May need to take in optimizer.
+    #     """
+    #     batch = [b.to(self.device) if torch.is_tensor(b) else b for b in batch]
+    #     deltas = self.deltas.to(self.device).long()
+    #     if self.calc_crps_sum:
+    #         batch_expanded = [d[None].expand(self.calc_crps_sum, *([-1] * len(d.shape))).flatten(0, 1) for d in batch]
+    #     else:
+    #         batch_expanded = batch
+    #     xs, conditions, masks, *_, init_z = self._preprocess_batch(batch_expanded)
+    #     n_frames, batch_size, *_ = xs.shape
+        
+    #     # hold predictions
+    #     z = init_z
+    #     xs_pred = []
+    #     xs_pred_all = []
+
+    #     # rl scores
+    #     log_probs = []
+    #     entropies = []
+    #     values = []
+    #     rewards = []
+
+    #     # --------------------------------------------------
+    #     # 1. Context frames (no RL)
+    #     # --------------------------------------------------
+    #     for t in range(self.context_frames // self.frame_stack):
+    #         z, x_next_pred, _, _ = self.transition_model(z, xs[t], conditions[t], deterministic_t=0)
+    #         xs_pred.append(x_next_pred)
+
+    #     # --------------------------------------------------
+    #     # 2. RL section — rollout future frames
+    #     # --------------------------------------------------
+    #     while len(xs_pred) < n_frames:
+    #         if self.chunk_size > 0:
+    #             horizon = min(n_frames - len(xs_pred), self.chunk_size)
+    #         else:
+    #             horizon = n_frames - len(xs_pred)
+    #         max_rl_steps = int((self.sampling_timesteps + int(horizon * self.uncertainty_scale)) * self.cfg.schedule_matrix.rollout_multiple)
+
+    #         chunk = [
+    #             torch.randn((batch_size,) + tuple(self.x_stacked_shape), device=self.device) for _ in range(horizon)
+    #         ]
+
+    #         # rollout multiple scales original length (to start)
+    #         decision_tracker = torch.zeros(batch_size, device=self.device, dtype=torch.long) # what noise level is everything at right now; bounded 0<=dt< num_sampling_steps; in next version add horizon dimension
+    #         max_idx = self.sampling_timesteps - 1
+    #         for m in range(max_rl_steps): # ensures max num of rl steps finite
+    #             # print(f"Taking RL step {m}")
+    #             if torch.all(decision_tracker >= max_idx):
+    #                 break
+    #             if self.transition_model.return_all_timesteps: # can keep these lines
+    #                 xs_pred_all.append(chunk)
+    #             z_chunk = z.detach() # can keep detachment
+    #             for t in range(horizon):
+    #                 # get logits for the informed schedule
+    #                 noise_idx = decision_tracker.long().to(device=self.device)
+    #                 # print("Noise idx looks like", noise_idx)
+    #                 logits, value = self.matrix_model(chunk[t], z_chunk, noise_idx)
+    #                 dist = Categorical(logits=logits)
+
+    #                 # sample a decision, append the results
+    #                 action = dist.sample()
+    #                 log_prob = dist.log_prob(action)
+    #                 log_probs.append(log_prob)
+    #                 entropies.append(dist.entropy())
+    #                 action_delta = deltas.to(self.device)[action]
+
+    #                 # print("Actions mapped to ", action_delta)
+    #                 # need latter three to be disjoint
+    #                 can_denoise = (decision_tracker < max_idx)
+    #                 denoise_step = (action_delta > 0) & can_denoise
+    #                 noise_step = (action_delta < 0)
+    #                 flat_step = ~(denoise_step | noise_step) # either we chose not to step OR (we chose not to/cannot denoise (aka ~denoise) AND chose not to noise (aka ~noise_step))
+
+    #                 # broadcast mask
+    #                 denoise_step_mask_x = denoise_step.view(batch_size, *([1] * (chunk[t].dim() - 1)))
+    #                 denoise_step_mask_z = denoise_step.view(batch_size, *([1] * (z_chunk.dim() - 1)))
+    #                 flat_step_mask_x = flat_step.view(batch_size, *([1] * (chunk[t].dim() - 1)))
+    #                 flat_step_mask_z = flat_step.view(batch_size, *([1] * (z_chunk.dim() - 1)))
+    #                 # ....
+
+    #                 # renoise those who need it (not implemented yet -- or will this go after ddim?)
+                    
+    #                 # take a ddim step on everybody 
+    #                 new_chunk_t, new_chunk_z = self.transition_model.ddim_sample_step_vecind(
+    #                     chunk[t], z_chunk, conditions[len(xs_pred) + t],
+    #                     index_vec=noise_idx
+    #                 )
+
+    #                 # keep non-updated the same noise level (option to hold value or resample)
+    #                 chunk[t] = torch.where(denoise_step_mask_x, new_chunk_t, chunk[t])
+    #                 z_chunk = torch.where(denoise_step_mask_z, new_chunk_z, z_chunk)
+
+    #                 # update the decision tracker
+    #                 decision_tracker = decision_tracker + action_delta
+    #                 decision_tracker = decision_tracker.clamp(0, max_idx)
+
+    #                 # hygiene
+    #                 del new_chunk_t, new_chunk_z
+    #                 del noise_idx, action_delta
+    #                 del denoise_step_mask_x, denoise_step_mask_z
+    #                 del flat_step_mask_x, flat_step_mask_z
+    #                 torch.cuda.empty_cache()
+
+    #             z = z_chunk
+    #         xs_pred += chunk
+
+    #     # at this point xs_pred is list length n_frames; stack etc.
+    #     xs_pred = torch.stack(xs_pred)      # (T, B, fs*C, ...)
+    #     xs_gt = xs
+
+    #     # -----------------------
+    #     # 3. compute scalar reward (e.g. -CRPS or -MSE for now)
+    #     # -----------------------
+    #     # for a very first pass: simple MSE over prediction region
+    #     loss_per_elem = F.mse_loss(xs_pred, xs_gt, reduction="none")
+    #     print("Loss is ", loss_per_elem)
+    #     loss = self.reweigh_loss(loss_per_elem, masks)
+    #     print("Reweighed loss is ", loss)
+    #     reward = -loss.detach()   # higher reward = lower loss
+    #     # -----------------------
+    #     # 4. vanilla REINFORCE with entropy bonus (batch baseline)
+    #     # -----------------------
+    #     if log_probs:
+    #         log_probs = torch.stack(log_probs, dim=0)    # (N_decisions, B)
+    #         entropies = torch.stack(entropies, dim=0)    # (N_decisions, B)
+
+    #         print("Shape of log probs: ")
+    #         print(log_probs.shape)
+
+    #         # simple baseline: mean reward over batch
+    #         baseline = reward.mean()
+    #         advantage = (reward - baseline).detach()
+
+    #         # broadcast advantage across decisions
+    #         # shape match: (N_decisions, B)
+    #         adv = advantage.expand_as(log_probs)
+
+    #         policy_loss = -(adv * log_probs).mean()
+    #         entropy_loss = -self.cfg.schedule_matrix.entropy_beta * entropies.mean()
+
+    #         total_loss = policy_loss + entropy_loss
+    #         total_loss.backward()
+
+    #     return {"xs_pred": self._unnormalize_x(rearrange(xs_pred, "t b (fs c) ... -> (t fs) b c ...", fs=self.frame_stack)),
+    #             "loss": loss}
+
+    def train_k_step_minimal(self, batch, batch_idx, namespace="train_k"):
         """ 
         On-policy training
         May need to take in optimizer.
@@ -308,147 +451,182 @@ class DiffusionForcingBase(BasePytorchAlgo):
             batch_expanded = [d[None].expand(self.calc_crps_sum, *([-1] * len(d.shape))).flatten(0, 1) for d in batch]
         else:
             batch_expanded = batch
+
+        # Initialize relevant for the rollout
         xs, conditions, masks, *_, init_z = self._preprocess_batch(batch_expanded)
         n_frames, batch_size, *_ = xs.shape
-        
-        # hold predictions
         z = init_z
-        xs_pred = []
-        xs_pred_all = []
+        xs_pred, log_probs, entropies, values, rewards, rollout_lengths = [], [], [], [], [], []
 
-        # rl scores
-        log_probs = []
-        entropies = []
-        values = []
-        rewards = []
-
-        # --------------------------------------------------
-        # 1. Context frames (no RL)
-        # --------------------------------------------------
+        # Warm up the context
         for t in range(self.context_frames // self.frame_stack):
-            print("Test to see if this is on the GPU")
             z, x_next_pred, _, _ = self.transition_model(z, xs[t], conditions[t], deterministic_t=0)
             xs_pred.append(x_next_pred)
 
-        # --------------------------------------------------
-        # 2. RL section — rollout future frames
-        # --------------------------------------------------
+        # Execute the rollout
         while len(xs_pred) < n_frames:
+            # Determine the horizon
             if self.chunk_size > 0:
                 horizon = min(n_frames - len(xs_pred), self.chunk_size)
             else:
                 horizon = n_frames - len(xs_pred)
-            max_rl_steps = int((self.sampling_timesteps + int(horizon * self.uncertainty_scale)) * self.cfg.schedule_matrix.rollout_multiple)
-
+            
             chunk = [
                 torch.randn((batch_size,) + tuple(self.x_stacked_shape), device=self.device) for _ in range(horizon)
             ]
 
-            # rollout multiple scales original length (to start)
-            decision_tracker = torch.zeros(batch_size, device=self.device, dtype=torch.long) # what noise level is everything at right now; bounded 0<=dt< num_sampling_steps; in next version add horizon dimension
-            max_idx = self.sampling_timesteps - 1
-            for m in range(max_rl_steps): # ensures max num of rl steps finite
-                print(f"Taking RL step {m}")
-                if torch.all(decision_tracker >= max_idx):
-                    break
-                if self.transition_model.return_all_timesteps: # can keep these lines
-                    xs_pred_all.append(chunk)
+            # Rollout this horizon
+            decision_tracker = torch.zeros(batch_size, device=self.device, dtype=torch.long) # What noise are we at? Bounded by max_idx
+            max_idx = self.sampling_timesteps - 1 # Do not exceed this noise level so that calls to DDIM are stable
+            max_rl_steps = int((self.sampling_timesteps + int(horizon * self.uncertainty_scale)) * self.cfg.schedule_matrix.rollout_multiple) # Ensure finite horiuzon
+            for m in range(max_rl_steps):
+                # print(f"Taking RL step {m}")
                 z_chunk = z.detach() # can keep detachment
                 for t in range(horizon):
-                    # get logits for the informed schedule
-                    noise_idx = decision_tracker.long().to(device=self.device)
-                    print("Noise idx looks like", noise_idx)
+                    
+                    # Calculate logits
+                    noise_idx = decision_tracker.long().to(device=self.device) # Noise conditions for decision maker
                     logits, value = self.matrix_model(chunk[t], z_chunk, noise_idx)
-                    dist = Categorical(logits=logits)
+                    dist = Categorical(logits=logits) # Torch distro to sample from
 
-                    # sample a decision, append the results
-                    action = dist.sample()
-                    print("Actions ", action)
-                    log_prob = dist.log_prob(action)
+                    # Take action and append reuslts
+                    action = dist.sample() # Action indices
+                    action_delta = deltas.to(self.device)[action] # Map to actual action
+                    log_prob = dist.log_prob(action) # 
                     log_probs.append(log_prob)
                     entropies.append(dist.entropy())
-                    action_delta = deltas.to(self.device)[action]
-                    print("Actions mapped to ", action_delta)
-                    # need latter three to be disjoint
+                    
+                    # Create latter three to be disjoint, our masks for RL transitions
                     can_denoise = (decision_tracker < max_idx)
                     denoise_step = (action_delta > 0) & can_denoise
                     noise_step = (action_delta < 0)
                     flat_step = ~(denoise_step | noise_step) # either we chose not to step OR (we chose not to/cannot denoise (aka ~denoise) AND chose not to noise (aka ~noise_step))
 
-                    # broadcast mask
+                    # Broadcast masks for the later on torch.where
                     denoise_step_mask_x = denoise_step.view(batch_size, *([1] * (chunk[t].dim() - 1)))
                     denoise_step_mask_z = denoise_step.view(batch_size, *([1] * (z_chunk.dim() - 1)))
-                    flat_step_mask_x = flat_step.view(batch_size, *([1] * (chunk[t].dim() - 1)))
-                    flat_step_mask_z = flat_step.view(batch_size, *([1] * (z_chunk.dim() - 1)))
                     # ....
 
-                    # renoise those who need it (not implemented yet -- or will this go after ddim?)
-                    
-                    # take a ddim step on everybody 
+                    # DDIM Step can occur on everyone because we clamped noise_idx
                     new_chunk_t, new_chunk_z = self.transition_model.ddim_sample_step_vecind(
                         chunk[t], z_chunk, conditions[len(xs_pred) + t],
                         index_vec=noise_idx
                     )
 
-                    # keep non-updated the same noise level (option to hold value or resample)
-                    print("The predicted chunk t is ", new_chunk_t[:5, :])
+                    # Keep non-updated the same noise level for now (option to "copy over" value or DDIM down, forward noise back up)
                     chunk[t] = torch.where(denoise_step_mask_x, new_chunk_t, chunk[t])
                     z_chunk = torch.where(denoise_step_mask_z, new_chunk_z, z_chunk)
 
-                    # update the decision tracker
+                    # Action deltas map to actual decision
                     decision_tracker = decision_tracker + action_delta
                     decision_tracker = decision_tracker.clamp(0, max_idx)
 
-                    # hygiene
+                    # Clean up GPU Utilization (delete when PL gets implemented)
                     del new_chunk_t, new_chunk_z
                     del noise_idx, action_delta
                     del denoise_step_mask_x, denoise_step_mask_z
-                    del flat_step_mask_x, flat_step_mask_z
                     torch.cuda.empty_cache()
 
                 z = z_chunk
             xs_pred += chunk
+            rollout_lengths.append(max_rl_steps) # later with early breaking append with actual length
 
-        # at this point xs_pred is list length n_frames; stack etc.
+        # At this point xs_pred is list length n_frames; stack etc.
         xs_pred = torch.stack(xs_pred)      # (T, B, fs*C, ...)
         xs_gt = xs
-
-        # -----------------------
-        # 3. compute scalar reward (e.g. -CRPS or -MSE for now)
-        # -----------------------
-        # for a very first pass: simple MSE over prediction region
+        
+        # Compute per-batch item rewards
         loss_per_elem = F.mse_loss(xs_pred, xs_gt, reduction="none")
         loss = self.reweigh_loss(loss_per_elem, masks)
-        reward = -loss.detach()   # higher reward = lower loss
+        rl_reweighed_loss = self.reweigh_loss_rl(loss_per_elem, masks)
+        reward = - rl_reweighed_loss.detach()
 
-        # -----------------------
-        # 4. vanilla REINFORCE with entropy bonus (batch baseline)
-        # -----------------------
+        # Policy Gradient Steps
         if log_probs:
-            log_probs = torch.stack(log_probs, dim=0)    # (N_decisions, B)
-            entropies = torch.stack(entropies, dim=0)    # (N_decisions, B)
+            # (N_decisions, B)
+            log_probs = torch.stack(log_probs, dim=0)
+            entropies = torch.stack(entropies, dim=0)
 
-            # simple baseline: mean reward over batch
+            # reward: [B]
+            # baseline: scalar
             baseline = reward.mean()
-            advantage = (reward - baseline).detach()
+            advantage = (reward - baseline).detach()       # [B]
 
-            # broadcast advantage across decisions
-            # shape match: (N_decisions, B)
-            adv = advantage.expand_as(log_probs)
+            # Expand advantage to match (N_decisions, B)
+            # advantage_expanded: [N_decisions, B]
+            advantage_expanded = advantage.unsqueeze(0).expand_as(log_probs)
 
-            policy_loss = -(adv * log_probs).mean()
+            # Vanilla REINFORCE objective:
+            # L = - E[ advantage * log π(a_t | s_t) ]
+            policy_loss = -(advantage_expanded * log_probs).mean()
+
+            # Entropy bonus (optional)
             entropy_loss = -self.cfg.schedule_matrix.entropy_beta * entropies.mean()
 
-            total_loss = policy_loss + entropy_loss
+            total_loss = policy_loss # + entropy_loss
             total_loss.backward()
+
+            print("Had the loss ", policy_loss.detach().cpu().item())
 
         return {"xs_pred": self._unnormalize_x(rearrange(xs_pred, "t b (fs c) ... -> (t fs) b c ...", fs=self.frame_stack)),
                 "loss": loss}
+    
     @property
     def device(self):
-        ''' TEMPORARY -- WWHEN OVERHAUL PL NEED TO REMOVE'''
+        ''' TEMPORARY -- WHEN OVERHAUL PL NEED TO REMOVE'''
         try:
             return next(self.parameters()).device
         except StopIteration:
             # no parameters — fallback
             return torch.device("cpu")
+
+
+    def reweigh_loss_rl(self, loss, weight=None):
+        """
+        RL-specific loss reweighting.
+
+        loss:   [T, B, fs*C, ...]
+        weight: [(T*fs), B, ...] or None
+
+        Returns:
+            per-sample (per-rollout) loss: [B]
+        """
+
+        # 1. Split frame-stack dimension: [T, B, fs*C, ...] -> [T, B, fs, C, ...]
+        loss = rearrange(loss, "t b (fs c) ... -> t b fs c ...", fs=self.frame_stack)
+
+        # 2. Apply temporal masks (nonterminal mask over frames)
+        if weight is not None:
+            # weight originally [(T*fs), B, ...]
+            # we want [T, B, fs, 1, 1, ...] so it can broadcast over C, H, W, etc.
+            expand_dim = len(loss.shape) - len(weight.shape) - 1  # how many trailing singleton dims to add
+
+            if expand_dim < 0:
+                raise ValueError(
+                    f"reweigh_loss_rl:  loss.shape={loss.shape}, weight.shape={weight.shape}, "
+                    "cannot expand weight to match loss."
+                )
+
+            # Build einops pattern correctly (no '...1' garbage)
+            # Example:
+            #   expand_dim = 0: "(t fs) b ... -> t b fs ..."
+            #   expand_dim = 2: "(t fs) b ... -> t b fs ... 1 1"
+            suffix = ""
+            if expand_dim > 0:
+                suffix = " " + " ".join(["1"] * expand_dim)
+
+            pattern = "(t fs) b ... -> t b fs ..." + suffix
+
+            weight = rearrange(weight, pattern, fs=self.frame_stack)
+            loss = loss * weight  # masked loss
+
+        # 3. Reduce over all non-batch dims → keep only [B]
+        # Current shape: [T, B, fs, C, ...]
+        # Move batch first, flatten rest
+        loss = rearrange(loss, "t b fs c ... -> b (t fs c ...)")
+        # Now shape: [B, N_flat]
+        loss = loss.mean(dim=1)  # → [B]
+
+        return loss
+
+
