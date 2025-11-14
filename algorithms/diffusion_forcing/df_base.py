@@ -466,6 +466,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
                 xs_pred.append(x_next_pred)
 
         # Execute the rollout
+        avg_decisions = []
         while len(xs_pred) < n_frames:
             # Determine the horizon
             if self.chunk_size > 0:
@@ -481,10 +482,10 @@ class DiffusionForcingBase(BasePytorchAlgo):
             decision_tracker = torch.zeros(batch_size, device=self.device, dtype=torch.long) # What noise are we at? Bounded by max_idx
             max_idx = self.sampling_timesteps - 1 # Do not exceed this noise level so that calls to DDIM are stable
             max_rl_steps = int((self.sampling_timesteps + int(horizon * self.uncertainty_scale)) * self.cfg.schedule_matrix.rollout_multiple) # Ensure finite horiuzon
+            avg_decision_frame = []
             for m in range(max_rl_steps):
                 # print(f"Taking RL step {m}")
                 z_chunk = z  # already kept as a no-grad tensor from previous steps
-
                 for t in range(horizon):
                     
                     # Calculate logits
@@ -524,6 +525,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
                     # Action deltas map to actual decision
                     decision_tracker = decision_tracker + action_delta
                     decision_tracker = decision_tracker.clamp(0, max_idx)
+                    avg_decision_frame.append(decision_tracker.float().mean().cpu().item())
 
                     # Clean up GPU Utilization (delete when PL gets implemented)
                     del new_chunk_t, new_chunk_z
@@ -536,6 +538,8 @@ class DiffusionForcingBase(BasePytorchAlgo):
                 z = z_chunk
             xs_pred += chunk
             rollout_lengths.append(max_rl_steps) # later with early breaking append with actual length
+            avg_decisions.append(avg_decision_frame)
+            
 
         # At this point xs_pred is list length n_frames; stack etc.
         xs_pred = torch.stack(xs_pred)      # (T, B, fs*C, ...)
@@ -624,6 +628,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         # END CRPS block
         # ==============================
 
+        # print(avg_decisions)
         del xs, xs_gt, chunk, conditions, init_z, z
         del log_probs, entropies, values, rewards, rollout_lengths
 
