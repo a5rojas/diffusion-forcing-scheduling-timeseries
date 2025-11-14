@@ -466,7 +466,6 @@ class DiffusionForcingBase(BasePytorchAlgo):
                 xs_pred.append(x_next_pred)
 
         # Execute the rollout
-        avg_decisions = []
         while len(xs_pred) < n_frames:
             # Determine the horizon
             if self.chunk_size > 0:
@@ -482,10 +481,10 @@ class DiffusionForcingBase(BasePytorchAlgo):
             decision_tracker = torch.zeros(batch_size, device=self.device, dtype=torch.long) # What noise are we at? Bounded by max_idx
             max_idx = self.sampling_timesteps - 1 # Do not exceed this noise level so that calls to DDIM are stable
             max_rl_steps = int((self.sampling_timesteps + int(horizon * self.uncertainty_scale)) * self.cfg.schedule_matrix.rollout_multiple) # Ensure finite horiuzon
-            avg_decision_frame = []
             for m in range(max_rl_steps):
                 # print(f"Taking RL step {m}")
                 z_chunk = z  # already kept as a no-grad tensor from previous steps
+
                 for t in range(horizon):
                     
                     # Calculate logits
@@ -525,7 +524,6 @@ class DiffusionForcingBase(BasePytorchAlgo):
                     # Action deltas map to actual decision
                     decision_tracker = decision_tracker + action_delta
                     decision_tracker = decision_tracker.clamp(0, max_idx)
-                    avg_decision_frame.append(decision_tracker.float().mean().cpu().item())
 
                     # Clean up GPU Utilization (delete when PL gets implemented)
                     del new_chunk_t, new_chunk_z
@@ -538,19 +536,40 @@ class DiffusionForcingBase(BasePytorchAlgo):
                 z = z_chunk
             xs_pred += chunk
             rollout_lengths.append(max_rl_steps) # later with early breaking append with actual length
-            avg_decisions.append(avg_decision_frame)
-            
 
         # At this point xs_pred is list length n_frames; stack etc.
         xs_pred = torch.stack(xs_pred)      # (T, B, fs*C, ...)
         xs_gt = xs
         
+        with torch.no_grad():
+            if self.calc_crps_sum:
+                # xs_pred: (T, B_eff, C)
+                # reshape to (S, T, B, C)
+                T, _, C = xs_pred.shape
+                S = self.calc_crps_sum
+                B0 = xs_pred.shape[1] // S
+
+                xs_pred_samples = xs_pred.permute(1, 0, 2)           # (B_eff, T, C)
+                xs_pred_samples = xs_pred_samples.view(S, B0, T, C)  # (S, B0, T, C)
+                xs_pred_samples = xs_pred_samples.permute(0, 2, 1, 3)  # (S, T, B0, C)
+
+                xs_gt_b = xs_gt.permute(1, 0, 2)            # (B_eff, T, C)
+                xs_gt_b = xs_gt_b.view(S, B0, T, C)
+                xs_gt_b = xs_gt_b[0]                        # take the first sample (truth identical)
+                xs_gt_b = xs_gt_b.permute(1, 0, 2)          # (T, B0, C)
+
+                crps_per_item = self.crps_per_batch_element(xs_pred_samples, xs_gt_b)
+                crps_per_item = crps_per_item.repeat_interleave(S) # to make it shape (B_eff) so that we can use downstream in reward
+
+                print("Shape of CRPS per_item is ", crps_per_item.shape)
+
         # Compute per-batch item rewards
         with torch.no_grad():
             loss_per_elem = F.mse_loss(xs_pred, xs_gt, reduction="none")
             loss = self.reweigh_loss(loss_per_elem, masks)
             rl_reweighed_loss = self.reweigh_loss_rl(loss_per_elem, masks)
-            reward = - rl_reweighed_loss  # already no-grad due to context
+            
+        reward = - crps_per_item # rl_reweighed_loss  # already no-grad due to context
 
         # Policy Gradient Steps
         if log_probs:
@@ -627,8 +646,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
 
         # END CRPS block
         # ==============================
-
-        # print(avg_decisions)
+        
         del xs, xs_gt, chunk, conditions, init_z, z
         del log_probs, entropies, values, rewards, rollout_lengths
 
@@ -718,26 +736,5 @@ class DiffusionForcingBase(BasePytorchAlgo):
 
             crps_vals[b] = crps_b
 
-
-
-## CRPS per item in a batch
+        return crps_vals
     
-# if self.calc_crps_sum:
-#     # xs_pred: (T, B_eff, C)
-#     # reshape to (S, T, B, C)
-#     T, _, C = xs_pred.shape
-#     S = self.calc_crps_sum
-#     B0 = xs_pred.shape[1] // S
-
-#     xs_pred_samples = xs_pred.permute(1, 0, 2)           # (B_eff, T, C)
-#     xs_pred_samples = xs_pred_samples.view(S, B0, T, C)  # (S, B0, T, C)
-#     xs_pred_samples = xs_pred_samples.permute(0, 2, 1, 3)  # (S, T, B0, C)
-
-#     xs_gt_b = xs_gt.permute(1, 0, 2)            # (B_eff, T, C)
-#     xs_gt_b = xs_gt_b.view(S, B0, T, C)
-#     xs_gt_b = xs_gt_b[0]                        # take the first sample (truth identical)
-#     xs_gt_b = xs_gt_b.permute(1, 0, 2)          # (T, B0, C)
-
-#     crps_per_item = self.crps_per_batch_element(xs_pred_samples, xs_gt_b)
-
-#     print("Shape of CRPS per_item is ", crps_per_item.shape)
