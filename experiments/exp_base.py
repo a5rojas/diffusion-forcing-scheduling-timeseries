@@ -346,3 +346,17 @@ class BaseLightningExperiment(BaseExperiment):
                 self.algo.matrix_model.load_state_dict(pm_sd, strict=True)
 
         print("Loaded algorithm weights from:", self.ckpt_path)
+
+
+# print("==== PARAMETER UPDATE CHECK ====")
+# for name, p in self.algo.matrix_model.named_parameters():
+#     if p.requires_grad:
+#         delta = (p.detach() - initial_params[name]).abs().sum().item()
+#         print(f"{name}: Δ = {delta}")
+#         initial_params[name] = p.detach().clone()
+
+# # capture initial parameter snapshot
+# initial_params = {}
+# for name, p in self.algo.matrix_model.named_parameters():
+#     if p.requires_grad:
+#         initial_params[name] = p.detach().clone()

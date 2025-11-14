@@ -193,7 +193,11 @@ class DiffusionForcingBase(BasePytorchAlgo):
             xs_pred.append(x_next_pred)
 
         # prediction
-        while len(xs_pred) < n_frames:
+        frameroller=0
+        max_roller_mod = float('inf') if self.cfg.schedule_matrix.max_roller < 0 else self.cfg.schedule_matrix.max_roller
+        print(f"max ", max_roller_mod)
+        while len(xs_pred) < n_frames and frameroller < max_roller_mod:
+            frameroller+=1
             if self.chunk_size > 0:
                 horizon = min(n_frames - len(xs_pred), self.chunk_size)
             else:
@@ -235,9 +239,9 @@ class DiffusionForcingBase(BasePytorchAlgo):
             xs_pred += chunk
 
         xs_pred = torch.stack(xs_pred)
-        loss = F.mse_loss(xs_pred, xs, reduction="none") # Could not be calcd until we finished rolling out
-        loss = self.reweigh_loss(loss, masks)
-        xs = rearrange(xs, "t b (fs c) ... -> (t fs) b c ...", fs=self.frame_stack)
+        loss = F.mse_loss(xs_pred, xs[:xs_pred.shape[0]], reduction="none") # Could not be calcd until we finished rolling out
+        loss = self.reweigh_loss(loss, masks[:xs_pred.shape[0]])
+        xs = rearrange(xs[:xs_pred.shape[0]], "t b (fs c) ... -> (t fs) b c ...", fs=self.frame_stack)
         xs_pred = rearrange(xs_pred, "t b (fs c) ... -> (t fs) b c ...", fs=self.frame_stack)
 
         xs = self._unnormalize_x(xs)
@@ -245,7 +249,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
 
         if not self.is_spatial:
             if self.transition_model.return_all_timesteps:
-                xs_pred_all = [torch.stack(item) for item in xs_pred_all]
+                xs_pred_all = [torch.stack(item) for item in xs_pred_all[:xs_pred.shape[0]]] # need to ensure later.
                 limit = self.transition_model.sampling_timesteps
                 for i in np.linspace(1, limit, 5, dtype=int):
                     xs_pred = xs_pred_all[i]
@@ -466,7 +470,11 @@ class DiffusionForcingBase(BasePytorchAlgo):
                 xs_pred.append(x_next_pred)
 
         # Execute the rollout
-        while len(xs_pred) < n_frames:
+        frameroller=0
+        max_roller_mod = float('inf') if self.cfg.schedule_matrix.max_roller < 0 else self.cfg.schedule_matrix.max_roller
+        while len(xs_pred) < n_frames and frameroller < max_roller_mod:
+            frameroller+=1
+            print(f"Rolling {frameroller}-th time")
             # Determine the horizon
             if self.chunk_size > 0:
                 horizon = min(n_frames - len(xs_pred), self.chunk_size)
@@ -539,8 +547,9 @@ class DiffusionForcingBase(BasePytorchAlgo):
 
         # At this point xs_pred is list length n_frames; stack etc.
         xs_pred = torch.stack(xs_pred)      # (T, B, fs*C, ...)
-        xs_gt = xs
-        
+        xs_gt = xs[:xs_pred.shape[0]]
+        masks = masks[:xs_pred.shape[0]]
+
         with torch.no_grad():
             if self.calc_crps_sum:
                 # xs_pred: (T, B_eff, C)
@@ -600,7 +609,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
             for p in self.matrix_model.policy_head.parameters():
                 if p.grad is not None:
                     total_norm += p.grad.detach().norm().item()
-
+            print(f"Made {log_probs.shape[0]} decisions per batch")
             print("Policy gradient norm:", total_norm)
             print("Had the loss ", policy_loss.detach().cpu().item())
             print(f"Had the advantage mean of {advantage.mean().item()} with std {advantage.std().item()}")

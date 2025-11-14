@@ -48,3 +48,4 @@ schedule_matrix:
   clip_eps: 0.25
   entropy_beta: 0.01
   rollout_multiple: 1 # multiplier on how much farther beyond og pyramid height that we will allow rollouts
+  max_roller: -1
