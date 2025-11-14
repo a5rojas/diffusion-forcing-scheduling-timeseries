@@ -14,6 +14,7 @@ import torch.nn.functional as F
 from torch.distributions import Categorical
 from typing import Any
 from einops import rearrange
+from algorithms.common.metrics import crps_quantile_sum
 
 from lightning.pytorch.utilities.types import STEP_OUTPUT
 
@@ -459,9 +460,10 @@ class DiffusionForcingBase(BasePytorchAlgo):
         xs_pred, log_probs, entropies, values, rewards, rollout_lengths = [], [], [], [], [], []
 
         # Warm up the context
-        for t in range(self.context_frames // self.frame_stack):
-            z, x_next_pred, _, _ = self.transition_model(z, xs[t], conditions[t], deterministic_t=0)
-            xs_pred.append(x_next_pred)
+        with torch.no_grad():
+            for t in range(self.context_frames // self.frame_stack):
+                z, x_next_pred, _, _ = self.transition_model(z, xs[t], conditions[t], deterministic_t=0)
+                xs_pred.append(x_next_pred)
 
         # Execute the rollout
         while len(xs_pred) < n_frames:
@@ -481,17 +483,18 @@ class DiffusionForcingBase(BasePytorchAlgo):
             max_rl_steps = int((self.sampling_timesteps + int(horizon * self.uncertainty_scale)) * self.cfg.schedule_matrix.rollout_multiple) # Ensure finite horiuzon
             for m in range(max_rl_steps):
                 # print(f"Taking RL step {m}")
-                z_chunk = z.detach() # can keep detachment
+                z_chunk = z  # already kept as a no-grad tensor from previous steps
+
                 for t in range(horizon):
                     
                     # Calculate logits
-                    noise_idx = decision_tracker.long().to(device=self.device) # Noise conditions for decision maker
+                    noise_idx = decision_tracker  # already long + on device
                     logits, value = self.matrix_model(chunk[t], z_chunk, noise_idx)
                     dist = Categorical(logits=logits) # Torch distro to sample from
 
                     # Take action and append reuslts
                     action = dist.sample() # Action indices
-                    action_delta = deltas.to(self.device)[action] # Map to actual action
+                    action_delta = deltas[action] # Map to actual action (deltas already on device)
                     log_prob = dist.log_prob(action) # 
                     log_probs.append(log_prob)
                     entropies.append(dist.entropy())
@@ -508,10 +511,11 @@ class DiffusionForcingBase(BasePytorchAlgo):
                     # ....
 
                     # DDIM Step can occur on everyone because we clamped noise_idx
-                    new_chunk_t, new_chunk_z = self.transition_model.ddim_sample_step_vecind(
-                        chunk[t], z_chunk, conditions[len(xs_pred) + t],
-                        index_vec=noise_idx
-                    )
+                    with torch.no_grad():
+                        new_chunk_t, new_chunk_z = self.transition_model.ddim_sample_step_vecind(
+                            chunk[t], z_chunk, conditions[len(xs_pred) + t],
+                            index_vec=noise_idx
+                        )
 
                     # Keep non-updated the same noise level for now (option to "copy over" value or DDIM down, forward noise back up)
                     chunk[t] = torch.where(denoise_step_mask_x, new_chunk_t, chunk[t])
@@ -523,9 +527,11 @@ class DiffusionForcingBase(BasePytorchAlgo):
 
                     # Clean up GPU Utilization (delete when PL gets implemented)
                     del new_chunk_t, new_chunk_z
-                    del noise_idx, action_delta
                     del denoise_step_mask_x, denoise_step_mask_z
-                    torch.cuda.empty_cache()
+                    del dist, logits, value, action, action_delta, noise_idx
+                    # NOTE: no torch.cuda.empty_cache() here; it's very slow and doesn't reduce peak memory
+
+                # print(f"Step {m} average is now ", decision_tracker.float().mean())
 
                 z = z_chunk
             xs_pred += chunk
@@ -536,10 +542,11 @@ class DiffusionForcingBase(BasePytorchAlgo):
         xs_gt = xs
         
         # Compute per-batch item rewards
-        loss_per_elem = F.mse_loss(xs_pred, xs_gt, reduction="none")
-        loss = self.reweigh_loss(loss_per_elem, masks)
-        rl_reweighed_loss = self.reweigh_loss_rl(loss_per_elem, masks)
-        reward = - rl_reweighed_loss.detach()
+        with torch.no_grad():
+            loss_per_elem = F.mse_loss(xs_pred, xs_gt, reduction="none")
+            loss = self.reweigh_loss(loss_per_elem, masks)
+            rl_reweighed_loss = self.reweigh_loss_rl(loss_per_elem, masks)
+            reward = - rl_reweighed_loss  # already no-grad due to context
 
         # Policy Gradient Steps
         if log_probs:
@@ -566,10 +573,63 @@ class DiffusionForcingBase(BasePytorchAlgo):
             total_loss = policy_loss # + entropy_loss
             total_loss.backward()
 
+            total_norm = 0
+            for p in self.matrix_model.policy_head.parameters():
+                if p.grad is not None:
+                    total_norm += p.grad.detach().norm().item()
+
+            print("Policy gradient norm:", total_norm)
             print("Had the loss ", policy_loss.detach().cpu().item())
+            print(f"Had the advantage mean of {advantage.mean().item()} with std {advantage.std().item()}")
+
+        # ==============================
+        #  Per-Batch CRPS Computation
+        # ==============================
+        crps_batch = None
+        if self.calc_crps_sum:
+            # xs_pred: (T, B, fs*C, ...)
+            # Need to reshape into (samples, time, batch, feature)
+
+            # 1. Reshape predictions to match validation structure
+            #    Your calc_crps_sum expansion made batch_expanded bigger:
+            #       B_effective = calc_crps_sum * B_original
+            #    but per "sample batch", samples are the first axis in xs_pred.
+            #
+            #    xs_pred: (T, B_eff, feature)
+            # -> rearrange to (samples=B_eff, time=T, batch=1, feature)
+            #
+            # For CRPS we want pred.shape = (samples, time, batch, feature)
+            # And truth.shape = (time, batch, feature)
+
+            pred_for_crps = xs_pred.permute(1, 0, 2)  # (B_eff, T, feature)
+            truth_for_crps = xs_gt.permute(1, 0, 2)   # (B_eff, T, feature)
+
+            # Add explicit batch-dimension so CRPS sees (samples, time, batch, feature)
+            pred_for_crps = pred_for_crps.unsqueeze(2)   # (B_eff, T, 1, feature)
+            truth_for_crps = truth_for_crps.unsqueeze(2) # (T, B_eff, feature) -> (T, B_eff, 1, feature) after adjust
+
+            # Need truth in (time, batch, feature)
+            truth_for_crps = truth_for_crps.squeeze(2)  # (B_eff, T, feature)? No: truth is (T, B_eff, feature)
+            truth_for_crps = truth_for_crps.permute(1, 0, 2)  # (T, B_eff, feature)
+
+            # Now compute CRPS over this batch
+            crps_batch = crps_quantile_sum(
+                pred_for_crps,      # (samples=B_eff, time=T, batch=1, feature)
+                truth_for_crps      # (time=T, batch=1, feature)
+            )
+
+            # Log/print if desired
+            print(f"[TRAIN] Per-batch CRPS_sum: {crps_batch.item()}")
+
+        # END CRPS block
+        # ==============================
+
+        del xs, xs_gt, chunk, conditions, init_z, z
+        del log_probs, entropies, values, rewards, rollout_lengths
 
         return {"xs_pred": self._unnormalize_x(rearrange(xs_pred, "t b (fs c) ... -> (t fs) b c ...", fs=self.frame_stack)),
-                "loss": loss}
+                "loss": loss, "crps": crps_batch.item()}
+
     
     @property
     def device(self):
@@ -628,5 +688,51 @@ class DiffusionForcingBase(BasePytorchAlgo):
         loss = loss.mean(dim=1)  # → [B]
 
         return loss
+    
+    @torch.no_grad()
+    def crps_per_batch_element(self, pred, truth):
+        """
+        pred:  (samples, time, batch, feature)
+        truth: (time, batch, feature)
+
+        returns: tensor of shape (batch,)
+        """
+        S, T, B, C = pred.shape
+        crps_vals = pred.new_zeros(B)
+
+        for b in range(B):
+            pred_b = pred[:, :, b, :]     # (S, T, F)
+            truth_b = truth[:, b, :].unsqueeze(1)  # (T, 1, F) but CRPS wants (T, batch, F)
+            truth_b = truth_b.permute(1, 0, 2)     # -> (batch=1, time, feature)
+
+            # reshape pred_b to (samples, time, batch=1, feature)
+            pred_b = pred_b.unsqueeze(2)
+
+            # Call CRPS
+            crps_b = crps_quantile_sum(pred_b, truth_b)
+
+            crps_vals[b] = crps_b
 
 
+
+## CRPS per item in a batch
+    
+# if self.calc_crps_sum:
+#     # xs_pred: (T, B_eff, C)
+#     # reshape to (S, T, B, C)
+#     T, _, C = xs_pred.shape
+#     S = self.calc_crps_sum
+#     B0 = xs_pred.shape[1] // S
+
+#     xs_pred_samples = xs_pred.permute(1, 0, 2)           # (B_eff, T, C)
+#     xs_pred_samples = xs_pred_samples.view(S, B0, T, C)  # (S, B0, T, C)
+#     xs_pred_samples = xs_pred_samples.permute(0, 2, 1, 3)  # (S, T, B0, C)
+
+#     xs_gt_b = xs_gt.permute(1, 0, 2)            # (B_eff, T, C)
+#     xs_gt_b = xs_gt_b.view(S, B0, T, C)
+#     xs_gt_b = xs_gt_b[0]                        # take the first sample (truth identical)
+#     xs_gt_b = xs_gt_b.permute(1, 0, 2)          # (T, B0, C)
+
+#     crps_per_item = self.crps_per_batch_element(xs_pred_samples, xs_gt_b)
+
+#     print("Shape of CRPS per_item is ", crps_per_item.shape)

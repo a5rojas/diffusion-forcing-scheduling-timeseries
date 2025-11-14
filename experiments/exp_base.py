@@ -299,8 +299,6 @@ class BaseLightningExperiment(BaseExperiment):
                 self.policy_opt.zero_grad()
                 out = self.algo.train_k_step_minimal(batch, batch_idx)
                 self.policy_opt.step()
-                break
-            break
                 # loss.backward()
                 # self.policy_opt.step()
                 # self.policy_opt.zero_grad()
