@@ -311,7 +311,7 @@ class BaseLightningExperiment(BaseExperiment):
 
                 # on policy and take step
                 self.policy_opt.zero_grad()
-                out = self.algo.train_k_step_minimal(batch, batch_idx)
+                out = self.algo.train_k_step_multiple(batch, batch_idx)
                 epoch_crps.append(out["crps"])
                 epoch_loss.append(out['loss'].detach().cpu().float().item())
                 epoch_tot_loss.append(out['total_loss'].detach().cpu().float().item())
@@ -320,24 +320,31 @@ class BaseLightningExperiment(BaseExperiment):
 
                 # log the k history if we want
                 k_history = out.get("k_history") if isinstance(out, dict) else None
-                if k_history is not None and wandb.run is not None:
+                if k_history is not None and (batch_idx == 0): # and wandb.run is not None:
+                    if not os.path.exists(str(pathlib.Path(hydra.core.hydra_config.HydraConfig.get()["runtime"]["output_dir"]) / "images")):
+                        os.mkdir(str(pathlib.Path(hydra.core.hydra_config.HydraConfig.get()["runtime"]["output_dir"]) / "images"))
                     fig = plot_k_matrix_history(
                         k_history,
                         max_diffusion_level=self.algo.sampling_timesteps,
                         title=f"epoch_{epoch}_batch_{batch_idx}",
+                        path=str(pathlib.Path(hydra.core.hydra_config.HydraConfig.get()["runtime"]["output_dir"]) / "images")
                     )
-                    wandb.log({"train_k/k_matrix": wandb.Image(fig)}, step=self.train_k_global_step)
+                    # wandb.log({"train_k/k_matrix": wandb.Image(fig)}, step=self.train_k_global_step)
                     plt.close(fig)
 
-                # log the k summary
-                k_summary = out.get("k_summary") if isinstance(out, dict) else None
-                if k_summary:
-                    log_payload = {f"train_k/{k}": v for k, v in k_summary.items()}
-                    if wandb.run is not None:
-                        wandb.log(log_payload, step=self.train_k_global_step)
-                    else:
-                        print(log_payload)
-               
+            # log the k history if we want
+            k_history = out.get("k_history") if isinstance(out, dict) else None
+            if k_history is not None: # and wandb.run is not None:
+                if not os.path.exists(str(pathlib.Path(hydra.core.hydra_config.HydraConfig.get()["runtime"]["output_dir"]) / "images")):
+                    os.mkdir(str(pathlib.Path(hydra.core.hydra_config.HydraConfig.get()["runtime"]["output_dir"]) / "images"))
+                fig = plot_k_matrix_history(
+                    k_history,
+                    max_diffusion_level=self.algo.sampling_timesteps,
+                    title=f"epoch_{epoch}_batch_{batch_idx}",
+                    path=str(pathlib.Path(hydra.core.hydra_config.HydraConfig.get()["runtime"]["output_dir"]) / "images")
+                )
+                # wandb.log({"train_k/k_matrix": wandb.Image(fig)}, step=self.train_k_global_step)
+                plt.close(fig)
 
             print("End of epoch CRPS score: ", sum(epoch_crps)/len(epoch_crps))
             print("End of epoch MSE loss: ", sum(epoch_loss)/len(epoch_loss))

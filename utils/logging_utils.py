@@ -712,7 +712,7 @@ def make_mpc_animation(
 
     return filename
 
-def plot_k_matrix_history(k_history: torch.Tensor, max_diffusion_level: int, title: str = None):
+def plot_k_matrix_history(k_history: torch.Tensor, max_diffusion_level: int, title: str = None, path: str = None):
     """Create a heatmap for the learned K-matrix trajectory.
 
     Args:
@@ -736,12 +736,15 @@ def plot_k_matrix_history(k_history: torch.Tensor, max_diffusion_level: int, tit
         vmin=0,
         vmax=max(1, max_diffusion_level),
     )
-    ax.set_xlabel("Diffusion steps")
-    ax.set_ylabel("Row / rollout step")
+    ax.set_xlabel("Rollout horizon")
+    ax.set_ylabel("Diffusion step")
     if title:
         ax.set_title(title)
     fig.colorbar(im, ax=ax, label="Noise index")
     fig.tight_layout()
+    save = path+"/"+title+".png"
+    plt.savefig(save)
+    print("saved a fig in ", str(save))
     return fig
 
 
