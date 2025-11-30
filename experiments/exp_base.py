@@ -303,6 +303,7 @@ class BaseLightningExperiment(BaseExperiment):
             if p.requires_grad:
                 initial_params[name] = p.detach().clone()
 
+        print(f"Will run {self.cfg.training_schedule_matrix.epochs} epochs")
         for epoch in range(self.cfg.training_schedule_matrix.epochs):
             epoch_crps = []
             epoch_loss =  []
@@ -311,7 +312,7 @@ class BaseLightningExperiment(BaseExperiment):
 
                 # on policy and take step
                 self.policy_opt.zero_grad()
-                out = self.algo.train_k_step_multiple(batch, batch_idx)
+                out = self.algo.train_k_step_multiple_densified(batch, batch_idx)
                 epoch_crps.append(out["crps"])
                 epoch_loss.append(out['loss'].detach().cpu().float().item())
                 epoch_tot_loss.append(out['total_loss'].detach().cpu().float().item())
@@ -346,14 +347,26 @@ class BaseLightningExperiment(BaseExperiment):
                 # wandb.log({"train_k/k_matrix": wandb.Image(fig)}, step=self.train_k_global_step)
                 plt.close(fig)
 
+            print("Train")
+            print("End of epoch CRPS score: ", sum(epoch_crps)/len(epoch_crps))
+            print("End of epoch MSE loss: ", sum(epoch_loss)/len(epoch_loss))
+            print("End of epoch total policy loss: ", sum(epoch_tot_loss)/len(epoch_tot_loss))
+            
+
+            epoch_crps = []
+            epoch_loss =  []
+            epoch_tot_loss = []
+            for batch_idx, batch in enumerate(val_dataloader):
+                out = self.algo.validate_k_step_multiple_densified(batch, batch_idx)
+                epoch_crps.append(out["crps"])
+                epoch_loss.append(out['loss'].detach().cpu().float().item())
+                epoch_tot_loss.append(out['total_loss'].detach().cpu().float().item())
+            
+            print("Val")
             print("End of epoch CRPS score: ", sum(epoch_crps)/len(epoch_crps))
             print("End of epoch MSE loss: ", sum(epoch_loss)/len(epoch_loss))
             print("End of epoch total policy loss: ", sum(epoch_tot_loss)/len(epoch_tot_loss))
             print()
-
-            # for batch in val_dataloader:
-            #     pass
-            #     self.algo.evaluate_k(batch)
 
     def _build_dataset(self, split: str) -> Optional[torch.utils.data.Dataset]:
         if split in ["training", "test", "validation"]:

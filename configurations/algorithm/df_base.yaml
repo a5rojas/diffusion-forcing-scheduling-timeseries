@@ -54,4 +54,10 @@ schedule_matrix:
   k_matrix_batches: 1
   k_viz_max_steps: 150
   k_viz_summary_steps: [1, 5, 10, 25]
+  raw_reward: True # always will be true
+  raw_reward_crps: False
+  step_reward: False 
+  step_reward_crps: False
+  difference_step_reward: False
+  
   
