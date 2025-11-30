@@ -23,7 +23,9 @@ from omegaconf import DictConfig
 
 from utils.print_utils import cyan
 from utils.distributed_utils import is_rank_zero
-
+import matplotlib.pyplot as plt
+import wandb
+from utils.logging_utils import plot_k_matrix_history
 
 class BaseExperiment(ABC):
     """
@@ -293,18 +295,58 @@ class BaseLightningExperiment(BaseExperiment):
         self.lam = self.algo.cfg.schedule_matrix.lam
         self.clip_eps = self.algo.cfg.schedule_matrix.clip_eps
         self.entropy_beta = self.algo.cfg.schedule_matrix.entropy_beta
+        self.train_k_global_step = 0
+
+        # capture initial parameter snapshot
+        initial_params = {}
+        for name, p in self.algo.matrix_model.named_parameters():
+            if p.requires_grad:
+                initial_params[name] = p.detach().clone()
 
         for epoch in range(self.cfg.training_schedule_matrix.epochs):
+            epoch_crps = []
+            epoch_loss =  []
+            epoch_tot_loss = []
             for batch_idx, batch in enumerate(train_dataloader):
+
+                # on policy and take step
                 self.policy_opt.zero_grad()
                 out = self.algo.train_k_step_minimal(batch, batch_idx)
+                epoch_crps.append(out["crps"])
+                epoch_loss.append(out['loss'].detach().cpu().float().item())
+                epoch_tot_loss.append(out['total_loss'].detach().cpu().float().item())
                 self.policy_opt.step()
-                # loss.backward()
-                # self.policy_opt.step()
-                # self.policy_opt.zero_grad()
+                self.train_k_global_step += 1
+
+                # log the k history if we want
+                k_history = out.get("k_history") if isinstance(out, dict) else None
+                if k_history is not None and wandb.run is not None:
+                    fig = plot_k_matrix_history(
+                        k_history,
+                        max_diffusion_level=self.algo.sampling_timesteps,
+                        title=f"epoch_{epoch}_batch_{batch_idx}",
+                    )
+                    wandb.log({"train_k/k_matrix": wandb.Image(fig)}, step=self.train_k_global_step)
+                    plt.close(fig)
+
+                # log the k summary
+                k_summary = out.get("k_summary") if isinstance(out, dict) else None
+                if k_summary:
+                    log_payload = {f"train_k/{k}": v for k, v in k_summary.items()}
+                    if wandb.run is not None:
+                        wandb.log(log_payload, step=self.train_k_global_step)
+                    else:
+                        print(log_payload)
+               
+
+            print("End of epoch CRPS score: ", sum(epoch_crps)/len(epoch_crps))
+            print("End of epoch MSE loss: ", sum(epoch_loss)/len(epoch_loss))
+            print("End of epoch total policy loss: ", sum(epoch_tot_loss)/len(epoch_tot_loss))
+            print()
+
             # for batch in val_dataloader:
-                # pass
-                # self.algo.evaluate_k(batch)
+            #     pass
+            #     self.algo.evaluate_k(batch)
 
     def _build_dataset(self, split: str) -> Optional[torch.utils.data.Dataset]:
         if split in ["training", "test", "validation"]:

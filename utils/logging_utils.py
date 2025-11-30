@@ -712,6 +712,38 @@ def make_mpc_animation(
 
     return filename
 
+def plot_k_matrix_history(k_history: torch.Tensor, max_diffusion_level: int, title: str = None):
+    """Create a heatmap for the learned K-matrix trajectory.
+
+    Args:
+        k_history: Tensor of shape (steps, batch) or (steps, tokens, batch).
+        max_diffusion_level: Largest diffusion index for color normalization.
+        title: Optional plot title.
+
+    Returns:
+        Matplotlib figure with the heatmap.
+    """
+
+    k_cpu = k_history.detach().float().cpu()
+    if k_cpu.dim() == 3:
+        k_cpu = k_cpu.mean(dim=2)  # average across batch for visualization
+    fig, ax = plt.subplots(figsize=(6, 4))
+    im = ax.imshow(
+        k_cpu.numpy(),
+        aspect="auto",
+        interpolation="nearest",
+        cmap="magma",
+        vmin=0,
+        vmax=max(1, max_diffusion_level),
+    )
+    ax.set_xlabel("Diffusion steps")
+    ax.set_ylabel("Row / rollout step")
+    if title:
+        ax.set_title(title)
+    fig.colorbar(im, ax=ax, label="Noise index")
+    fig.tight_layout()
+    return fig
+
 
 if __name__ == "__main__":
     # Draw image of a circle in a white background

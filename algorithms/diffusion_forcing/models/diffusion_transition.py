@@ -568,7 +568,7 @@ class DiffusionStepPolicy(nn.Module):
         self.cfg = cfg
         self.x_shape = x_shape
         self.z_shape = z_shape
-        self.num_actions = cfg.schedule_matrix.actions  # interpret as {-1, 0, 1} for 3
+        self.num_actions = cfg.schedule_matrix.actions  # interpret as {-1, 0, 1} for 3; {0, 1} for 2.
 
         self._build_model()
 

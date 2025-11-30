@@ -49,3 +49,9 @@ schedule_matrix:
   entropy_beta: 0.01
   rollout_multiple: 1 # multiplier on how much farther beyond og pyramid height that we will allow rollouts
   max_roller: -1
+  log_k_matrix: False
+  k_matrix_log_every: 50
+  k_matrix_batches: 1
+  k_viz_max_steps: 150
+  k_viz_summary_steps: [1, 5, 10, 25]
+  
