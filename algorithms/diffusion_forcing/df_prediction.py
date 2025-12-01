@@ -126,6 +126,18 @@ class DiffusionForcingPrediction(DiffusionForcingBase):
         nonterminals = torch.ones(batch[0].shape[0], batch[0].shape[1]).to(self.device)
         batch.append(nonterminals)
         return super().train_k_step_multiple_densified(batch, batch_idx, namespace=namespace)
+    
+    
+    def train_k_step_multiple_densified_gae(self, batch, batch_idx, namespace="train_k_gae"):
+        """
+        On-policy training with densified rewards + GAE.
+        """
+        batch = list(self.get_observations_from_gluonts_dataset(batch))
+        batch = [d for d in batch if d is not None]
+        nonterminals = torch.ones(batch[0].shape[0], batch[0].shape[1]).to(self.device)
+        batch.append(nonterminals)
+        return super().train_k_step_multiple_densified_gae(batch, batch_idx, namespace=namespace)
+
 
     def on_validation_epoch_end(self, namespace="validation", log_visualizations=False) -> None:
         if not self.validation_step_outputs:
