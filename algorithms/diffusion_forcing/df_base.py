@@ -472,7 +472,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
             # Entropy bonus (optional)
             entropy_loss = -self.cfg.schedule_matrix.entropy_beta * entropies.mean()
 
-            total_loss = policy_loss # + entropy_loss
+            total_loss = policy_loss + entropy_loss
             total_loss.backward()
 
             total_norm = 0
@@ -658,7 +658,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
             # Entropy bonus (optional)
             entropy_loss = -self.cfg.schedule_matrix.entropy_beta * entropies.mean()
 
-            total_loss = policy_loss # + entropy_loss
+            total_loss = policy_loss + entropy_loss
             total_loss.backward()
 
             # print(f"Made {log_probs.shape[0]} decisions per batch")
@@ -751,7 +751,8 @@ class DiffusionForcingBase(BasePytorchAlgo):
                     # Broadcast masks for the later on torch.where
                     denoise_step_mask_x = denoise_step.view(batch_size, *([1] * (chunk[t].dim() - 1)))
                     denoise_step_mask_z = denoise_step.view(batch_size, *([1] * (z_chunk.dim() - 1)))
-                    # ....
+                    noise_step_mask_x = noise_step.view(batch_size, *([1] * (chunk[t].dim() - 1)))
+                    noise_step_mask_z = noise_step.view(batch_size, *([1] * (z_chunk.dim() - 1)))
 
                     # DDIM Step can occur on everyone because we clamped noise_idx
                     with torch.no_grad():
@@ -760,13 +761,28 @@ class DiffusionForcingBase(BasePytorchAlgo):
                             index_vec=noise_idx
                         )
 
+                    if not self.cfg.schedule_matrix.positive_only:
+                        # Make this sample noise
+                        with torch.no_grad():
+                            noised_chunk_t = self.transition_model.q_renoise_from_ddim_index(
+                                x_t=chunk[t],
+                                index_vec=noise_idx,
+                                n=action_delta
+                            )
+
                     # Keep non-updated the same noise level for now (option to "copy over" value or DDIM down, forward noise back up)
-                    chunk[t] = torch.where(denoise_step_mask_x, new_chunk_t, chunk[t])
-                    z_chunk = torch.where(denoise_step_mask_z, new_chunk_z, z_chunk)
+                    chunk[t] = torch.where(denoise_step_mask_x, new_chunk_t, chunk[t]) # Copy over logic
+                    z_chunk = torch.where(denoise_step_mask_z, new_chunk_z, z_chunk) # Copy over logic
+                    # Noise data where we need to. Keep latent via copy over.
+                    if not self.cfg.schedule_matrix.positive_only:
+                        chunk[t] = torch.where(noise_step_mask_x, noised_chunk_t, chunk[t]) # what to do with the latent? can keep it 
 
                     # Action deltas map to actual decision
                     decision_tracker[t] = decision_tracker[t] + action_delta
                     decision_tracker[t] = decision_tracker[t].clamp(0, max_idx)
+
+                    # print(f"{m},{t} state dist is ", torch.unique(decision_tracker[t], return_counts=True))
+                    # print(f"{m},{t} decision dist is ", torch.unique(action_delta, return_counts=True))
 
                     # Clean up GPU Utilization (delete when PL gets implemented)
                     del new_chunk_t, new_chunk_z
@@ -882,7 +898,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
             # Entropy bonus (optional)
             entropy_loss = -self.cfg.schedule_matrix.entropy_beta * entropies.mean()
 
-            total_loss = policy_loss # + entropy_loss
+            total_loss = policy_loss + entropy_loss
             total_loss.backward()
 
             # print(f"Made {log_probs.shape[0]} decisions per batch")
@@ -980,10 +996,10 @@ class DiffusionForcingBase(BasePytorchAlgo):
                                 chunk[t], z_chunk, conditions[len(xs_pred) + t],
                                 index_vec=noise_idx
                             )
-
+                        
                         # Keep non-updated the same noise level for now (option to "copy over" value or DDIM down, forward noise back up)
-                        chunk[t] = torch.where(denoise_step_mask_x, new_chunk_t, chunk[t])
-                        z_chunk = torch.where(denoise_step_mask_z, new_chunk_z, z_chunk)
+                        chunk[t] = torch.where(denoise_step_mask_x, new_chunk_t, chunk[t]) # This copies over the non-changed values
+                        z_chunk = torch.where(denoise_step_mask_z, new_chunk_z, z_chunk) # This copies over the non-changed values
 
                         # Action deltas map to actual decision
                         decision_tracker = decision_tracker + action_delta
@@ -1064,7 +1080,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
             # Entropy bonus (optional)
             entropy_loss = -self.cfg.schedule_matrix.entropy_beta * entropies.mean()
 
-            total_loss = policy_loss # + entropy_loss
+            total_loss = policy_loss + entropy_loss
 
         
         del xs, xs_gt, chunk, conditions, init_z, z
@@ -1241,7 +1257,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
             # Entropy bonus (optional)
             entropy_loss = -self.cfg.schedule_matrix.entropy_beta * entropies.mean()
 
-            total_loss = policy_loss # + entropy_loss
+            total_loss = policy_loss + entropy_loss
             
             # print(f"Made {log_probs.shape[0]} decisions per batch")
             # print("Policy gradient norm:", total_norm)
@@ -1464,7 +1480,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
             # Entropy bonus (optional)
             entropy_loss = -self.cfg.schedule_matrix.entropy_beta * entropies.mean()
 
-            total_loss = policy_loss # + entropy_loss
+            total_loss = policy_loss + entropy_loss
             
         del xs, xs_gt, chunk, conditions, init_z, z
         del log_probs, entropies, values, rewards, rollout_lengths

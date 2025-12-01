@@ -412,6 +412,75 @@ class DiffusionTransitionModel(nn.Module):
             + extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
         )
 
+    def q_renoise_from_ddim_index(self, x_t, index_vec, n, noise=None):
+        """
+        Forward-diffuse x_t according to RL actions using the SAME semantics
+        as ddim_sample_step_vecind.
+
+        - index_vec: DDIM scheduler indices
+        - n: RL actions (negative = add noise)
+        """
+
+        B = x_t.shape[0]
+        device = x_t.device
+        shape = x_t.shape
+
+        # -------------------------------------------------------------
+        # 1. Build DDIM time schedule EXACTLY as you wrote
+        # -------------------------------------------------------------
+        total_timesteps = self.num_timesteps
+        sampling_timesteps = self.sampling_timesteps
+
+        times = torch.linspace(-1, total_timesteps - 1, steps=sampling_timesteps + 1)
+        times = list(reversed(times.int().tolist()))
+        time_pairs = list(zip(times[:-1], times[1:]))  # [(T-1, T-2), ..., (1, 0), (0, -1)]
+
+        # Make tensor
+        time_pairs_tensor = torch.tensor(time_pairs, device=device, dtype=torch.long)  # [S, 2]
+
+        # -------------------------------------------------------------
+        # 2. Map DDIM index_vec → DDPM time t
+        # -------------------------------------------------------------
+        t_current = time_pairs_tensor[index_vec][:, 0]   # [B], the "t" in (t -> t_next)
+
+        # -------------------------------------------------------------
+        # 3. Interpret RL actions
+        #    Only n < 0 means forward noise
+        # -------------------------------------------------------------
+        mask_forward = (n < 0)
+
+        if not mask_forward.any():
+            return x_t  # nothing to do
+
+        # steps forward = -n (positive integer)
+        steps = (-n).clamp(min=1)
+
+        # target DDPM times
+        t_next = (t_current + steps).clamp(max=total_timesteps - 1)
+
+        # -------------------------------------------------------------
+        # 4. Forward DDPM noising: q(x_{t+n}|x_t)
+        # -------------------------------------------------------------
+        noise = default(noise, lambda: torch.randn_like(x_t))
+        noise = torch.clamp(noise, -self.clip_noise, self.clip_noise)
+
+        alpha_bar_t  = extract(self.alphas_cumprod, t_current, shape)
+        alpha_bar_tn = extract(self.alphas_cumprod, t_next,    shape)
+
+        ratio = alpha_bar_tn / alpha_bar_t
+        c1 = torch.sqrt(ratio)
+        c2 = torch.sqrt(1 - ratio)
+
+        x_forward = c1 * x_t + c2 * noise
+
+        # -------------------------------------------------------------
+        # 5. Only apply to negative-action entries
+        # -------------------------------------------------------------
+        mask = mask_forward.view(B, *([1] * (x_t.ndim - 1)))
+        x_out = torch.where(mask, x_forward, x_t)
+
+        return x_out
+
     def ddim_sample_step(
         self, x, z_cond, external_cond=None, index=0, return_x_start=False, return_guidance_const=False
     ):
