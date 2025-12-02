@@ -331,7 +331,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
                 z, x_next_pred, _, _ = self.transition_model(z, xs[t], conditions[t], deterministic_t=0)
                 xs_pred.append(x_next_pred)
 
-        # Execute the rollout
+        # Execute the rollout, require grad if training
         frameroller = 0
         k_histories = []
         max_roller_mod = float('inf') if self.cfg.schedule_matrix.max_roller < 0 else self.cfg.schedule_matrix.max_roller
@@ -358,8 +358,6 @@ class DiffusionForcingBase(BasePytorchAlgo):
                 # print(f"Taking RL step {m}")
                 z_chunk = z  # already kept as a no-grad tensor from previous steps
                 for t in range(horizon):
-
-                    # Print some shapes
 
                     # Calculate logits
                     noise_idx = decision_tracker[t].clone().detach()  # already long + on device
@@ -478,7 +476,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
                 dense_rewards = dense_diff
             dense_reward = dense_rewards.reshape(-1, xs_gt.shape[1])
 
-        # Unlike validation_step we have not mapped (T, B, fs*C, ...) --> (T * fs , B , C) yet.
+        # Unlike original self.validation_step we have not mapped (T, B, fs*C, ...) --> (T * fs , B , C) yet.
         with torch.no_grad():
             if self.calc_crps_sum:
                 # xs_pred: (T, B_eff, C)
@@ -597,8 +595,6 @@ class DiffusionForcingBase(BasePytorchAlgo):
                     z_chunk = z  # already kept as a no-grad tensor from previous steps
                     for t in range(horizon):
 
-                        # Print some shapes
-
                         # Calculate logits
                         noise_idx = decision_tracker[t].clone().detach()  # already long + on device
                         logits, value = self.matrix_model(chunk[t], z_chunk, noise_idx) # [batch, action_space]
@@ -620,7 +616,8 @@ class DiffusionForcingBase(BasePytorchAlgo):
                         # Broadcast masks for the later on torch.where
                         denoise_step_mask_x = denoise_step.view(batch_size, *([1] * (chunk[t].dim() - 1)))
                         denoise_step_mask_z = denoise_step.view(batch_size, *([1] * (z_chunk.dim() - 1)))
-                        # ....
+                        noise_step_mask_x = noise_step.view(batch_size, *([1] * (chunk[t].dim() - 1)))
+                        noise_step_mask_z = noise_step.view(batch_size, *([1] * (z_chunk.dim() - 1)))
 
                         # DDIM Step can occur on everyone because we clamped noise_idx
                         with torch.no_grad():
@@ -629,13 +626,28 @@ class DiffusionForcingBase(BasePytorchAlgo):
                                 index_vec=noise_idx
                             )
 
+                        if not self.cfg.schedule_matrix.positive_only:
+                            # Make this sample noise
+                            with torch.no_grad():
+                                noised_chunk_t = self.transition_model.q_renoise_from_ddim_index(
+                                    x_t=chunk[t],
+                                    index_vec=noise_idx,
+                                    n=action_delta
+                                )
+
                         # Keep non-updated the same noise level for now (option to "copy over" value or DDIM down, forward noise back up)
-                        chunk[t] = torch.where(denoise_step_mask_x, new_chunk_t, chunk[t])
-                        z_chunk = torch.where(denoise_step_mask_z, new_chunk_z, z_chunk)
+                        chunk[t] = torch.where(denoise_step_mask_x, new_chunk_t, chunk[t]) # Copy over logic
+                        z_chunk = torch.where(denoise_step_mask_z, new_chunk_z, z_chunk) # Copy over logic
+                        # Noise data where we need to. Keep latent via copy over.
+                        if not self.cfg.schedule_matrix.positive_only:
+                            chunk[t] = torch.where(noise_step_mask_x, noised_chunk_t, chunk[t]) # what to do with the latent? can keep it 
 
                         # Action deltas map to actual decision
                         decision_tracker[t] = decision_tracker[t] + action_delta
                         decision_tracker[t] = decision_tracker[t].clamp(0, max_idx)
+
+                        # print(f"{m},{t} state dist is ", torch.unique(decision_tracker[t], return_counts=True))
+                        # print(f"{m},{t} decision dist is ", torch.unique(action_delta, return_counts=True))
 
                         # Clean up GPU Utilization (delete when PL gets implemented)
                         del new_chunk_t, new_chunk_z
@@ -700,7 +712,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
                 dense_rewards = dense_diff
             dense_reward = dense_rewards.reshape(-1, xs_gt.shape[1])
 
-        # Unlike validation_step we have not mapped (T, B, fs*C, ...) --> (T * fs , B , C) yet.
+        # Unlike original self.validation_step we have not mapped (T, B, fs*C, ...) --> (T * fs , B , C) yet.
         with torch.no_grad():
             if self.calc_crps_sum:
                 # xs_pred: (T, B_eff, C)
