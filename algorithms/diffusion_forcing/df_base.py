@@ -511,7 +511,9 @@ class DiffusionForcingBase(BasePytorchAlgo):
 
             # make reward negative because the raw metrics are meant to be minimized
             reward = - crps_per_item if self.raw_reward_crps else -rl_reweighed_loss
-            reward = reward.unsqueeze(0).expand_as(log_probs) + dense_reward
+            reward = reward.unsqueeze(0).expand_as(log_probs)
+            if self.step_reward:
+               reward = reward + dense_reward
 
             # reward: [B]
             baseline = reward.mean() # baseline: scalar
@@ -747,7 +749,9 @@ class DiffusionForcingBase(BasePytorchAlgo):
 
             # make reward negative because the raw metrics are meant to be minimized
             reward = - crps_per_item if self.raw_reward_crps else -rl_reweighed_loss
-            reward = reward.unsqueeze(0).expand_as(log_probs) + dense_reward
+            reward = reward.unsqueeze(0).expand_as(log_probs)
+            if self.step_reward:
+               reward = reward + dense_reward
 
             # reward: [B]
             baseline = reward.mean() # baseline: scalar
