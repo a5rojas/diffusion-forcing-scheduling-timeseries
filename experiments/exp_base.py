@@ -21,7 +21,7 @@ from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint, Ea
 
 from omegaconf import DictConfig
 
-from utils.print_utils import cyan
+from utils.print_utils import cyan, append_row_to_csv
 from utils.distributed_utils import is_rank_zero
 import matplotlib.pyplot as plt
 import wandb
@@ -276,6 +276,17 @@ class BaseLightningExperiment(BaseExperiment):
 
     def training_schedule_matrix(self) -> None:
         """Implement K training"""
+
+        # Create logging directory
+        outdir = pathlib.Path(hydra.core.hydra_config.HydraConfig.get()["runtime"]["output_dir"])
+        logdir = outdir / "training_log"
+        logdir.mkdir(exist_ok=True)
+
+        train_csv = logdir / "train_log.csv"
+        val_csv   = logdir / "val_log.csv"
+        test_csv  = logdir / "test_log.csv"
+
+        # Initialize models and load state dics
         if not self.algo:
             self.algo = self._build_algo()
             self.algo = self.algo.to('cuda')
@@ -287,21 +298,18 @@ class BaseLightningExperiment(BaseExperiment):
         else:
             raise ValueError("If not also concurrently training a model, must pass one in")
 
+        # Build Dataloaders
         train_dataloader=self._build_training_loader(batch_size_mod=self.cfg.training_schedule_matrix.batch_size)
         val_dataloader=self._build_validation_loader(batch_size_mod=self.cfg.training_schedule_matrix.batch_size)
+        test_dataloader=self._build_test_loader(batch_size_mod=self.cfg.training_schedule_matrix.batch_size)
 
+        # K-Training setup
         self.policy_opt = torch.optim.Adam(self.algo.matrix_model.parameters(), lr=self.cfg.training_schedule_matrix.lr)
         self.gamma = self.algo.cfg.schedule_matrix.gamma
         self.lam = self.algo.cfg.schedule_matrix.lam
         self.clip_eps = self.algo.cfg.schedule_matrix.clip_eps
         self.entropy_beta = self.algo.cfg.schedule_matrix.entropy_beta
         self.train_k_global_step = 0
-
-        # capture initial parameter snapshot
-        initial_params = {}
-        for name, p in self.algo.matrix_model.named_parameters():
-            if p.requires_grad:
-                initial_params[name] = p.detach().clone()
 
         print(f"Will run {self.cfg.training_schedule_matrix.epochs} epochs")
         for epoch in range(self.cfg.training_schedule_matrix.epochs):
@@ -313,60 +321,125 @@ class BaseLightningExperiment(BaseExperiment):
                 # on policy and take step
                 self.policy_opt.zero_grad()
                 out = self.algo.train_k_step_multiple_densified(batch, batch_idx)
-                epoch_crps.append(out["crps"])
-                epoch_loss.append(out['loss'].detach().cpu().float().item())
-                epoch_tot_loss.append(out['total_loss'].detach().cpu().float().item())
+                
+                mse_val   = out["loss"].detach().cpu().item()
+                crps_val  = out["crps"]
+                pol_val   = out["total_loss"].detach().cpu().item()
+
+                epoch_crps.append(crps_val)
+                epoch_loss.append(mse_val)
+                epoch_tot_loss.append(pol_val)
+
                 self.policy_opt.step()
                 self.train_k_global_step += 1
+                
+                # store relevant info
+                append_row_to_csv(
+                    train_csv,
+                    {
+                        "epoch": epoch,
+                        "step": self.train_k_global_step,
+                        "batch_idx": batch_idx,
+                        "split": "train",
+                        "crps": crps_val,
+                        "mse_loss": mse_val,
+                        "policy_loss": pol_val,
+                    }
+                )
 
                 # log the k history if we want
                 k_history = out.get("k_history") if isinstance(out, dict) else None
-                if k_history is not None and (batch_idx == 0): # and wandb.run is not None:
-                    if not os.path.exists(str(pathlib.Path(hydra.core.hydra_config.HydraConfig.get()["runtime"]["output_dir"]) / "images")):
-                        os.mkdir(str(pathlib.Path(hydra.core.hydra_config.HydraConfig.get()["runtime"]["output_dir"]) / "images"))
+                if k_history is not None and (batch_idx%10 == 0):
+                    imgdir = outdir / "images"
+                    imgdir.mkdir(exist_ok=True)
                     fig = plot_k_matrix_history(
                         k_history,
                         max_diffusion_level=self.algo.sampling_timesteps,
                         title=f"epoch_{epoch}_batch_{batch_idx}",
-                        path=str(pathlib.Path(hydra.core.hydra_config.HydraConfig.get()["runtime"]["output_dir"]) / "images")
+                        path=str(imgdir)
                     )
-                    # wandb.log({"train_k/k_matrix": wandb.Image(fig)}, step=self.train_k_global_step)
                     plt.close(fig)
-
-            # log the k history if we want
-            k_history = out.get("k_history") if isinstance(out, dict) else None
-            if k_history is not None: # and wandb.run is not None:
-                if not os.path.exists(str(pathlib.Path(hydra.core.hydra_config.HydraConfig.get()["runtime"]["output_dir"]) / "images")):
-                    os.mkdir(str(pathlib.Path(hydra.core.hydra_config.HydraConfig.get()["runtime"]["output_dir"]) / "images"))
-                fig = plot_k_matrix_history(
-                    k_history,
-                    max_diffusion_level=self.algo.sampling_timesteps,
-                    title=f"epoch_{epoch}_batch_{batch_idx}",
-                    path=str(pathlib.Path(hydra.core.hydra_config.HydraConfig.get()["runtime"]["output_dir"]) / "images")
-                )
-                # wandb.log({"train_k/k_matrix": wandb.Image(fig)}, step=self.train_k_global_step)
-                plt.close(fig)
 
             print("Train")
             print("End of epoch CRPS score: ", sum(epoch_crps)/len(epoch_crps))
             print("End of epoch MSE loss: ", sum(epoch_loss)/len(epoch_loss))
             print("End of epoch total policy loss: ", sum(epoch_tot_loss)/len(epoch_tot_loss))
-            
+
+            # epoch level
+            append_row_to_csv(
+                train_csv,
+                {
+                    "epoch": epoch,
+                    "step": self.train_k_global_step,
+                    "split": "train_epoch",
+                    "crps": sum(epoch_crps)/len(epoch_crps),
+                    "mse_loss": sum(epoch_loss)/len(epoch_loss),
+                    "policy_loss": sum(epoch_tot_loss)/len(epoch_tot_loss),
+                }
+            )
 
             epoch_crps = []
             epoch_loss =  []
             epoch_tot_loss = []
             for batch_idx, batch in enumerate(val_dataloader):
                 out = self.algo.validate_k_step_multiple_densified(batch, batch_idx)
-                epoch_crps.append(out["crps"])
-                epoch_loss.append(out['loss'].detach().cpu().float().item())
-                epoch_tot_loss.append(out['total_loss'].detach().cpu().float().item())
-            
+                mse_val   = out["loss"].detach().cpu().item()
+                crps_val  = out["crps"]
+                pol_val   = out["total_loss"].detach().cpu().item()
+
+                epoch_crps.append(crps_val)
+                epoch_loss.append(mse_val)
+                epoch_tot_loss.append(pol_val)
+
             print("Val")
             print("End of epoch CRPS score: ", sum(epoch_crps)/len(epoch_crps))
             print("End of epoch MSE loss: ", sum(epoch_loss)/len(epoch_loss))
             print("End of epoch total policy loss: ", sum(epoch_tot_loss)/len(epoch_tot_loss))
             print()
+
+            append_row_to_csv(
+                val_csv,
+                {
+                    "epoch": epoch,
+                    "step": self.train_k_global_step,
+                    "split": "val_epoch",
+                    "crps": sum(epoch_crps)/len(epoch_crps),
+                    "mse_loss": sum(epoch_loss)/len(epoch_loss),
+                    "policy_loss": sum(epoch_tot_loss)/len(epoch_tot_loss),
+                }
+            )
+
+        test_crps = []
+        test_loss =  []
+        test_tot_loss = []
+        for batch_idx, batch in enumerate(test_dataloader):
+            out = self.algo.test_k_step_multiple_densified(batch, batch_idx)
+            mse_val   = out["loss"].detach().cpu().item()
+            crps_val  = out["crps"]
+            pol_val   = out["total_loss"].detach().cpu().item()
+
+            test_crps.append(crps_val)
+            test_loss.append(mse_val)
+            test_tot_loss.append(pol_val)
+
+        print("Test")
+        print("End CRPS score: ", sum(epoch_crps)/len(epoch_crps))
+        print("End MSE loss: ", sum(epoch_loss)/len(epoch_loss))
+        print("End total policy loss: ", sum(epoch_tot_loss)/len(epoch_tot_loss))
+        print()
+
+        append_row_to_csv(
+            test_csv,
+            {
+                "epoch": "final",
+                "step": self.train_k_global_step,
+                "batch_idx": batch_idx,
+                "split": "test",
+                "crps": crps_val,
+                "mse_loss": mse_val,
+                "policy_loss": pol_val,
+            }
+        )
 
     def _build_dataset(self, split: str) -> Optional[torch.utils.data.Dataset]:
         if split in ["training", "test", "validation"]:
@@ -408,17 +481,3 @@ class BaseLightningExperiment(BaseExperiment):
                 self.algo.matrix_model.load_state_dict(pm_sd, strict=True)
 
         print("Loaded algorithm weights from:", self.ckpt_path)
-
-
-# print("==== PARAMETER UPDATE CHECK ====")
-# for name, p in self.algo.matrix_model.named_parameters():
-#     if p.requires_grad:
-#         delta = (p.detach() - initial_params[name]).abs().sum().item()
-#         print(f"{name}: Δ = {delta}")
-#         initial_params[name] = p.detach().clone()
-
-# # capture initial parameter snapshot
-# initial_params = {}
-# for name, p in self.algo.matrix_model.named_parameters():
-#     if p.requires_grad:
-#         initial_params[name] = p.detach().clone()
