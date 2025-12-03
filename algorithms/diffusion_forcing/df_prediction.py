@@ -76,6 +76,15 @@ class DiffusionForcingPrediction(DiffusionForcingBase):
         batch.append(nonterminals)
         return super().train_k_step_multiple_densified(batch, batch_idx, namespace=namespace)
     
+    
+    def train_k_step_multiple_densified_gae(self, batch, batch_idx, namespace="train_k_gae"):
+        batch = list(self.get_observations_from_gluonts_dataset(batch))
+        batch = [d for d in batch if d is not None]
+        nonterminals = torch.ones(batch[0].shape[0], batch[0].shape[1]).to(self.device)
+        batch.append(nonterminals)
+        return super().train_k_step_multiple_densified_gae(batch, batch_idx, namespace=namespace)
+
+    
     @torch.no_grad()
     def validate_k_step_multiple_densified(self, batch, batch_idx, namespace="validate_k_step_multiple_densified"):
         batch = list(self.get_observations_from_gluonts_dataset(batch))

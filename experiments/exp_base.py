@@ -321,7 +321,8 @@ class BaseLightningExperiment(BaseExperiment):
 
                 # on policy and take step
                 self.policy_opt.zero_grad()
-                out = self.algo.train_k_step_multiple_densified(batch, batch_idx)
+                # out = self.algo.train_k_step_multiple_densified(batch, batch_idx)
+                out = self.algo.train_k_step_multiple_densified_gae(batch, batch_idx)
                 
                 mse_val   = out["loss"].detach().cpu().item()
                 # crps_val  = out["crps"]
