@@ -299,9 +299,9 @@ class BaseLightningExperiment(BaseExperiment):
             raise ValueError("If not also concurrently training a model, must pass one in")
 
         # Build Dataloaders
-        train_dataloader=self._build_training_loader(batch_size_mod=self.cfg.training_schedule_matrix.batch_size)
-        val_dataloader=self._build_validation_loader(batch_size_mod=self.cfg.training_schedule_matrix.batch_size)
-        test_dataloader=self._build_test_loader(batch_size_mod=self.cfg.training_schedule_matrix.batch_size)
+        train_dataloader=self._build_training_loader(batch_size_mod=self.cfg.training_schedule_matrix.train_batch_size)
+        val_dataloader=self._build_validation_loader(batch_size_mod=self.cfg.training_schedule_matrix.val_batch_size)
+        test_dataloader=self._build_test_loader(batch_size_mod=self.cfg.training_schedule_matrix.val_batch_size)
 
         # K-Training setup
         self.policy_opt = torch.optim.Adam(self.algo.matrix_model.parameters(), lr=self.cfg.training_schedule_matrix.lr)
@@ -323,10 +323,10 @@ class BaseLightningExperiment(BaseExperiment):
                 out = self.algo.train_k_step_multiple_densified(batch, batch_idx)
                 
                 mse_val   = out["loss"].detach().cpu().item()
-                crps_val  = out["crps"]
+                # crps_val  = out["crps"]
                 pol_val   = out["total_loss"].detach().cpu().item()
 
-                epoch_crps.append(crps_val)
+                # epoch_crps.append(crps_val)
                 epoch_loss.append(mse_val)
                 epoch_tot_loss.append(pol_val)
 
@@ -341,7 +341,7 @@ class BaseLightningExperiment(BaseExperiment):
                         "step": self.train_k_global_step,
                         "batch_idx": batch_idx,
                         "split": "train",
-                        "crps": crps_val,
+                        # "crps": crps_val,
                         "mse_loss": mse_val,
                         "policy_loss": pol_val,
                     }
@@ -361,9 +361,8 @@ class BaseLightningExperiment(BaseExperiment):
                     plt.close(fig)
 
             print("Train")
-            print("End of epoch CRPS score: ", sum(epoch_crps)/len(epoch_crps))
-            print("End of epoch MSE loss: ", sum(epoch_loss)/len(epoch_loss))
-            print("End of epoch total policy loss: ", sum(epoch_tot_loss)/len(epoch_tot_loss))
+            print(f"End of epoch {epoch} avg MSE loss: ", sum(epoch_loss)/len(epoch_loss))
+            print(f"End of epoch {epoch} avg total policy loss: ", sum(epoch_tot_loss)/len(epoch_tot_loss))
 
             # epoch level
             append_row_to_csv(
@@ -372,7 +371,7 @@ class BaseLightningExperiment(BaseExperiment):
                     "epoch": epoch,
                     "step": self.train_k_global_step,
                     "split": "train_epoch",
-                    "crps": sum(epoch_crps)/len(epoch_crps),
+                    # "crps": sum(epoch_crps)/len(epoch_crps),
                     "mse_loss": sum(epoch_loss)/len(epoch_loss),
                     "policy_loss": sum(epoch_tot_loss)/len(epoch_tot_loss),
                 }
@@ -392,9 +391,9 @@ class BaseLightningExperiment(BaseExperiment):
                 epoch_tot_loss.append(pol_val)
 
             print("Val")
-            print("End of epoch CRPS score: ", sum(epoch_crps)/len(epoch_crps))
-            print("End of epoch MSE loss: ", sum(epoch_loss)/len(epoch_loss))
-            print("End of epoch total policy loss: ", sum(epoch_tot_loss)/len(epoch_tot_loss))
+            print(f"End of epoch {epoch} CRPS score: ", sum(epoch_crps)/len(epoch_crps))
+            print(f"End of epoch {epoch} MSE loss: ", sum(epoch_loss)/len(epoch_loss))
+            print(f"End of epoch {epoch} total policy loss: ", sum(epoch_tot_loss)/len(epoch_tot_loss))
             print()
 
             append_row_to_csv(

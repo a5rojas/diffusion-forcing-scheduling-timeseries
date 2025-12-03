@@ -50,6 +50,8 @@ test:
 training_schedule_matrix:
   compile: False
   epochs: 10
-  lr: 1e-4
+  lr: 1e-3
   precision: 16-mixed
-  batch_size: 32
+  train_batch_size: 128
+  val_batch_size: 32
+

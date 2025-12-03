@@ -52,9 +52,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         self.k_viz_max_steps = getattr(cfg.schedule_matrix, "k_viz_max_steps", 0)
         self.k_viz_summary_steps = getattr(cfg.schedule_matrix, "k_viz_summary_steps", [])
         self.raw_reward = getattr(cfg.schedule_matrix, "raw_reward", True)
-        self.raw_reward_crps = getattr(cfg.schedule_matrix, "raw_reward_crps", False)
         self.step_reward = getattr(cfg.schedule_matrix, "step_reward", False)
-        self.step_reward_crps = getattr(cfg.schedule_matrix, "step_reward_crps", False)
         self.difference_step_reward = getattr(cfg.schedule_matrix, "difference_step_reward", False)
 
         super().__init__(cfg)
@@ -314,13 +312,13 @@ class DiffusionForcingBase(BasePytorchAlgo):
         """
         batch = [b.to(self.device) if torch.is_tensor(b) else b for b in batch]
         deltas = self.deltas.to(self.device).long()
-        if self.calc_crps_sum:
-            batch_expanded = [d[None].expand(self.calc_crps_sum, *([-1] * len(d.shape))).flatten(0, 1) for d in batch]
-        else:
-            batch_expanded = batch
+        # if self.calc_crps_sum:
+        #     batch_expanded = [d[None].expand(self.calc_crps_sum, *([-1] * len(d.shape))).flatten(0, 1) for d in batch]
+        # else:
+        #     batch_expanded = batch
 
         # Initialize relevant for the rollout
-        xs, conditions, masks, *_, init_z = self._preprocess_batch(batch_expanded)
+        xs, conditions, masks, *_, init_z = self._preprocess_batch(batch)
         n_frames, batch_size, *_ = xs.shape
         z = init_z
         xs_pred, log_probs, entropies, values, rewards, dense_rewards, rollout_lengths = [], [], [], [], [], [], []
@@ -422,38 +420,17 @@ class DiffusionForcingBase(BasePytorchAlgo):
                     k_matrix_predicted[m][t] = decision_tracker[t]
 
                 # get post m-step rewards now
-                with torch.no_grad():
-                    if self.step_reward:
+                if self.step_reward:
+                    with torch.no_grad():
                         stacked_chunk = torch.stack(chunk)
                         stacked_x = xs[len(xs_pred):len(xs_pred) + horizon] # (Horizon, B, C)
 
-                        if not self.step_reward_crps:
-                            
-                            # we made t deicsions that round and will allocate 
-                            step_loss = F.mse_loss(stacked_chunk, stacked_x, reduction="none")
-                            rl_reweighed_step_loss = self.reweigh_loss_rl(step_loss, masks[len(xs_pred):len(xs_pred) + horizon])
-                            rl_reweighed_step_loss = rl_reweighed_step_loss.unsqueeze(0).expand(horizon, -1)# (B) --> (1,B)--> (N_DEC_IN_M, B), assuming N_DEC equal to horizon
-                            dense_rewards.append(-rl_reweighed_step_loss) # (N_DEC, B_eff)
-                        else:
-                            if self.calc_crps_sum:
-                                # xs_pred: (T, B_eff, C)
-                                # reshape to (S, T, B, C)
-                                T, _, C = stacked_chunk.shape
-                                S = self.calc_crps_sum
-                                B0 = stacked_chunk.shape[1] // S # where S is number of "crps resamples"
+                        # we made t deicsions that round and will allocate 
+                        step_loss = F.mse_loss(stacked_chunk, stacked_x, reduction="none")
+                        rl_reweighed_step_loss = self.reweigh_loss_rl(step_loss, masks[len(xs_pred):len(xs_pred) + horizon])
+                        rl_reweighed_step_loss = rl_reweighed_step_loss.unsqueeze(0).expand(horizon, -1)# (B) --> (1,B)--> (N_DEC_IN_M, B), assuming N_DEC equal to horizon
+                        dense_rewards.append(-rl_reweighed_step_loss) # (N_DEC, B_eff)
 
-                                xs_pred_samples = stacked_chunk.permute(1, 0, 2)           # (B_eff, T, C)
-                                xs_pred_samples = xs_pred_samples.view(S, B0, T, C)  # (S, B0, T, C)
-                                xs_pred_samples = xs_pred_samples.permute(0, 2, 1, 3)  # (S, T, B0, C)
-
-                                xs_gt_b = stacked_x.permute(1, 0, 2)            # (B_eff, T, C)
-                                xs_gt_b = xs_gt_b.view(S, B0, T, C)
-                                xs_gt_b = xs_gt_b[0]                        # take the first sample (truth identical)
-                                xs_gt_b = xs_gt_b.permute(1, 0, 2)          # (T, B0, C)
-                                # have (S, T, B, C) and (T, B, C)
-                                crps_per_item = self.crps_per_batch_element(xs_pred_samples, xs_gt_b, is_inference=True) # shape is (B) -- the sole reward per batch item gotten at the end of rollout
-                                crps_per_item = crps_per_item.unsqueeze(0).expand(horizon, -1).unsqueeze(-1).expand(-1, -1, S).reshape(horizon, B0*S) # (T, B) instead of (T, B_eff)
-                                dense_rewards.append(-crps_per_item)
 
             # print(k_matrix_predicted.mean(dim=-1))
             
@@ -478,26 +455,6 @@ class DiffusionForcingBase(BasePytorchAlgo):
 
         # Unlike original self.validation_step we have not mapped (T, B, fs*C, ...) --> (T * fs , B , C) yet.
         with torch.no_grad():
-            if self.calc_crps_sum:
-                # xs_pred: (T, B_eff, C)
-                # reshape to (S, T, B, C)
-                T, _, C = xs_pred.shape
-                S = self.calc_crps_sum
-                B0 = xs_pred.shape[1] // S # where S is number of "crps resamples"
-
-                xs_pred_samples = xs_pred.permute(1, 0, 2)           # (B_eff, T, C)
-                xs_pred_samples = xs_pred_samples.view(S, B0, T, C)  # (S, B0, T, C)
-                xs_pred_samples = xs_pred_samples.permute(0, 2, 1, 3)  # (S, T, B0, C)
-
-                xs_gt_b = xs_gt.permute(1, 0, 2)            # (B_eff, T, C)
-                xs_gt_b = xs_gt_b.view(S, B0, T, C)
-                xs_gt_b = xs_gt_b[0]                        # take the first sample (truth identical)
-                xs_gt_b = xs_gt_b.permute(1, 0, 2)          # (T, B0, C)
-
-                crps_per_item = self.crps_per_batch_element(xs_pred_samples, xs_gt_b) # shape is (B) -- the sole reward per batch item gotten at the end of rollout
-                crps_per_item = crps_per_item.repeat_interleave(S) # to make it shape (B_eff) so that we can use downstream in reward for all the decisions we made
-
-                crps_batch = crps_quantile_sum(xs_pred_samples, xs_gt_b)
 
             loss_per_elem = F.mse_loss(xs_pred, xs_gt, reduction="none")
             loss = self.reweigh_loss(loss_per_elem, masks)
@@ -510,7 +467,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
             entropies = torch.stack(entropies, dim=0)
 
             # make reward negative because the raw metrics are meant to be minimized
-            reward = - crps_per_item if self.raw_reward_crps else -rl_reweighed_loss
+            reward = -rl_reweighed_loss
             reward = reward.unsqueeze(0).expand_as(log_probs)
             if self.step_reward:
                reward = reward + dense_reward
@@ -541,7 +498,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         del log_probs, entropies, values, rewards, rollout_lengths
 
         return {"xs_pred": self._unnormalize_x(rearrange(xs_pred, "t b (fs c) ... -> (t fs) b c ...", fs=self.frame_stack)),
-                "loss": loss, "crps": crps_batch.item(), "total_loss": total_loss, "k_history": k_histories.squeeze(0)}
+                "loss": loss, "total_loss": total_loss, "k_history": k_histories.squeeze(0)}
 
 
     def validate_k_step_multiple_densified(self, batch, batch_idx, namespace="train_k"):
@@ -660,38 +617,16 @@ class DiffusionForcingBase(BasePytorchAlgo):
                         k_matrix_predicted[m][t] = decision_tracker[t]
 
                     # get post m-step rewards now
-                    with torch.no_grad():
-                        if self.step_reward:
+                    if self.step_reward:
+                        with torch.no_grad():
                             stacked_chunk = torch.stack(chunk)
                             stacked_x = xs[len(xs_pred):len(xs_pred) + horizon] # (Horizon, B, C)
 
-                            if not self.step_reward_crps:
-                                
-                                # we made t deicsions that round and will allocate 
-                                step_loss = F.mse_loss(stacked_chunk, stacked_x, reduction="none")
-                                rl_reweighed_step_loss = self.reweigh_loss_rl(step_loss, masks[len(xs_pred):len(xs_pred) + horizon])
-                                rl_reweighed_step_loss = rl_reweighed_step_loss.unsqueeze(0).expand(horizon, -1)# (B) --> (1,B)--> (N_DEC_IN_M, B), assuming N_DEC equal to horizon
-                                dense_rewards.append(-rl_reweighed_step_loss) # (N_DEC, B_eff)
-                            else:
-                                if self.calc_crps_sum:
-                                    # xs_pred: (T, B_eff, C)
-                                    # reshape to (S, T, B, C)
-                                    T, _, C = stacked_chunk.shape
-                                    S = self.calc_crps_sum
-                                    B0 = stacked_chunk.shape[1] // S # where S is number of "crps resamples"
-
-                                    xs_pred_samples = stacked_chunk.permute(1, 0, 2)           # (B_eff, T, C)
-                                    xs_pred_samples = xs_pred_samples.view(S, B0, T, C)  # (S, B0, T, C)
-                                    xs_pred_samples = xs_pred_samples.permute(0, 2, 1, 3)  # (S, T, B0, C)
-
-                                    xs_gt_b = stacked_x.permute(1, 0, 2)            # (B_eff, T, C)
-                                    xs_gt_b = xs_gt_b.view(S, B0, T, C)
-                                    xs_gt_b = xs_gt_b[0]                        # take the first sample (truth identical)
-                                    xs_gt_b = xs_gt_b.permute(1, 0, 2)          # (T, B0, C)
-                                    # have (S, T, B, C) and (T, B, C)
-                                    crps_per_item = self.crps_per_batch_element(xs_pred_samples, xs_gt_b, is_inference=True) # shape is (B) -- the sole reward per batch item gotten at the end of rollout
-                                    crps_per_item = crps_per_item.unsqueeze(0).expand(horizon, -1).unsqueeze(-1).expand(-1, -1, S).reshape(horizon, B0*S) # (T, B) instead of (T, B_eff)
-                                    dense_rewards.append(-crps_per_item)
+                            # we made t deicsions that round and will allocate 
+                            step_loss = F.mse_loss(stacked_chunk, stacked_x, reduction="none")
+                            rl_reweighed_step_loss = self.reweigh_loss_rl(step_loss, masks[len(xs_pred):len(xs_pred) + horizon])
+                            rl_reweighed_step_loss = rl_reweighed_step_loss.unsqueeze(0).expand(horizon, -1)# (B) --> (1,B)--> (N_DEC_IN_M, B), assuming N_DEC equal to horizon
+                            dense_rewards.append(-rl_reweighed_step_loss) # (N_DEC, B_eff)
 
                 # print(k_matrix_predicted.mean(dim=-1))
                 
@@ -732,9 +667,6 @@ class DiffusionForcingBase(BasePytorchAlgo):
                 xs_gt_b = xs_gt_b[0]                        # take the first sample (truth identical)
                 xs_gt_b = xs_gt_b.permute(1, 0, 2)          # (T, B0, C)
 
-                crps_per_item = self.crps_per_batch_element(xs_pred_samples, xs_gt_b) # shape is (B) -- the sole reward per batch item gotten at the end of rollout
-                crps_per_item = crps_per_item.repeat_interleave(S) # to make it shape (B_eff) so that we can use downstream in reward for all the decisions we made
-
                 crps_batch = crps_quantile_sum(xs_pred_samples, xs_gt_b)
 
             loss_per_elem = F.mse_loss(xs_pred, xs_gt, reduction="none")
@@ -748,7 +680,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
             entropies = torch.stack(entropies, dim=0)
 
             # make reward negative because the raw metrics are meant to be minimized
-            reward = - crps_per_item if self.raw_reward_crps else -rl_reweighed_loss
+            reward = -rl_reweighed_loss
             reward = reward.unsqueeze(0).expand_as(log_probs)
             if self.step_reward:
                reward = reward + dense_reward
