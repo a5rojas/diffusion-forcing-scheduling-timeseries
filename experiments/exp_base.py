@@ -310,6 +310,7 @@ class BaseLightningExperiment(BaseExperiment):
         self.clip_eps = self.algo.cfg.schedule_matrix.clip_eps
         self.entropy_beta = self.algo.cfg.schedule_matrix.entropy_beta
         self.train_k_global_step = 0
+        self.multiply_denoise_bonus = self.algo.cfg.schedule_matrix.multiply_denoise_bonus
 
         print(f"Will run {self.cfg.training_schedule_matrix.epochs} epochs")
         for epoch in range(self.cfg.training_schedule_matrix.epochs):
@@ -407,6 +408,11 @@ class BaseLightningExperiment(BaseExperiment):
                     "policy_loss": sum(epoch_tot_loss)/len(epoch_tot_loss),
                 }
             )
+
+            # change any parameters?
+            if self.multiply_denoise_bonus > 0:
+                print("Multiply denosie bonus")
+                self.algo.denoise_bonus*=2
 
         test_crps = []
         test_loss =  []

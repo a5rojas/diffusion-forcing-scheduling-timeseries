@@ -59,5 +59,6 @@ schedule_matrix:
   step_reward: False 
   difference_step_reward: False
   denoise_reward: False
+  multiply_denoise_bonus: 2
   
   
