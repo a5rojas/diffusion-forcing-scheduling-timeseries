@@ -309,6 +309,8 @@ class BaseLightningExperiment(BaseExperiment):
         self.lam = self.algo.cfg.schedule_matrix.lam
         self.clip_eps = self.algo.cfg.schedule_matrix.clip_eps
         self.entropy_beta = self.algo.cfg.schedule_matrix.entropy_beta
+        self.gae_lambda = self.algo.cfg.schedule_matrix.gae_lambda
+        self.value_coef = self.algo.cfg.schedule_matrix.value_coef
         self.train_k_global_step = 0
         self.multiply_denoise_bonus = self.algo.cfg.schedule_matrix.multiply_denoise_bonus
 
