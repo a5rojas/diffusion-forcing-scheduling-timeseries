@@ -307,7 +307,7 @@ class BaseLightningExperiment(BaseExperiment):
         self.policy_opt = torch.optim.Adam(self.algo.matrix_model.parameters(), lr=self.cfg.training_schedule_matrix.lr)
         self.gamma = self.algo.cfg.schedule_matrix.gamma
         self.lam = self.algo.cfg.schedule_matrix.lam
-        self.clip_eps = self.algo.cfg.schedule_matrix.clip_eps
+        self.value_coef = self.algo.cfg.schedule_matrix.value_coef
         self.entropy_beta = self.algo.cfg.schedule_matrix.entropy_beta
         self.train_k_global_step = 0
         self.multiply_denoise_bonus = self.algo.cfg.schedule_matrix.multiply_denoise_bonus
@@ -411,7 +411,7 @@ class BaseLightningExperiment(BaseExperiment):
 
             # change any parameters?
             if self.multiply_denoise_bonus > 0:
-                print("Multiply denosie bonus")
+                print("Multiply denoise bonus")
                 self.algo.denoise_bonus*=2
 
         test_crps = []
