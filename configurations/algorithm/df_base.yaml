@@ -47,6 +47,7 @@ schedule_matrix:
   lam: 0.95
   clip_eps: 0.25
   entropy_beta: 0.0
+  denoise_bonus: 0.001
   rollout_multiple: 1 # multiplier on how much farther beyond og pyramid height that we will allow rollouts
   max_roller: -1
   log_k_matrix: False
@@ -57,5 +58,6 @@ schedule_matrix:
   raw_reward: True # always will be true
   step_reward: False 
   difference_step_reward: False
+  denoise_reward: False
   
   

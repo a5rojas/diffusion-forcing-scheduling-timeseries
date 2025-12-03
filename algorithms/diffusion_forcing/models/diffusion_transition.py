@@ -645,7 +645,8 @@ class DiffusionStepPolicy(nn.Module):
         x_channel = self.x_shape[0]
         z_channel = self.z_shape[0]
         emb_dim = 32  # small latent code for timestep embedding
-        hidden_dim = 128
+        hidden_dim = 256
+        hidden_dim2 = 256
 
         # Embedding for diffusion timesteps (adapts to cfg.diffusion.sampling_timesteps)
         self.noise_emb = nn.Embedding(self.cfg.diffusion.sampling_timesteps, emb_dim)
@@ -657,15 +658,15 @@ class DiffusionStepPolicy(nn.Module):
         # Heads
         self.policy_head = nn.Sequential(
             nn.ReLU(),
-            nn.Linear(hidden_dim * 2 + emb_dim, 64),
+            nn.Linear(hidden_dim * 2 + emb_dim, hidden_dim2),
             nn.ReLU(),
-            nn.Linear(64, self.num_actions),
+            nn.Linear(hidden_dim2, self.num_actions),
         )
         self.value_head = nn.Sequential(
             nn.ReLU(),
-            nn.Linear(hidden_dim * 2 + emb_dim, 64),
+            nn.Linear(hidden_dim * 2 + emb_dim, hidden_dim2),
             nn.ReLU(),
-            nn.Linear(64, 1),
+            nn.Linear(hidden_dim2, 1),
         )
 
     def forward(self, x, z, noise_idx):

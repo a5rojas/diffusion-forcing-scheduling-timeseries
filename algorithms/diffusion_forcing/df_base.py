@@ -54,6 +54,8 @@ class DiffusionForcingBase(BasePytorchAlgo):
         self.raw_reward = getattr(cfg.schedule_matrix, "raw_reward", True)
         self.step_reward = getattr(cfg.schedule_matrix, "step_reward", False)
         self.difference_step_reward = getattr(cfg.schedule_matrix, "difference_step_reward", False)
+        self.denoise_reward = getattr(cfg.schedule_matrix, "denoise_reward", False)
+        self.denoise_bonus = getattr(cfg.schedule_matrix, "denoise_bonus", 0.001)
 
         super().__init__(cfg)
 
@@ -321,7 +323,8 @@ class DiffusionForcingBase(BasePytorchAlgo):
         xs, conditions, masks, *_, init_z = self._preprocess_batch(batch)
         n_frames, batch_size, *_ = xs.shape
         z = init_z
-        xs_pred, log_probs, entropies, values, rewards, dense_rewards, rollout_lengths = [], [], [], [], [], [], []
+        xs_pred, log_probs, entropies, values, rollout_lengths = [], [], [], [], []
+        rewards, dense_rewards, denoise_rewards, = [], [], []
 
         # Warm up the context
         with torch.no_grad():
@@ -411,6 +414,10 @@ class DiffusionForcingBase(BasePytorchAlgo):
                     # print(f"{m},{t} state dist is ", torch.unique(decision_tracker[t], return_counts=True))
                     # print(f"{m},{t} decision dist is ", torch.unique(action_delta, return_counts=True))
 
+                    if self.denoise_reward:
+                        r_denoise_t = self.cfg.schedule_matrix.denoise_bonus * denoise_step.float()
+                        denoise_rewards.append(r_denoise_t)
+
                     # Clean up GPU Utilization (delete when PL gets implemented)
                     del new_chunk_t, new_chunk_z
                     del denoise_step_mask_x, denoise_step_mask_z
@@ -431,13 +438,18 @@ class DiffusionForcingBase(BasePytorchAlgo):
                         rl_reweighed_step_loss = rl_reweighed_step_loss.unsqueeze(0).expand(horizon, -1)# (B) --> (1,B)--> (N_DEC_IN_M, B), assuming N_DEC equal to horizon
                         dense_rewards.append(-rl_reweighed_step_loss) # (N_DEC, B_eff)
 
+                if self.denoise_reward:
+                    with torch.no_grad():
+                        denoise_rewards
+
 
             # print(k_matrix_predicted.mean(dim=-1))
             
             k_histories.append(k_matrix_predicted)
             xs_pred += chunk
             rollout_lengths.append(max_rl_steps) # later with early breaking append with actual length
-
+        
+        # stack results
         # At this point xs_pred is list length n_frames; stack etc.
         xs_pred = torch.stack(xs_pred)      # (T, B, fs*C, ...)
         xs_gt = xs[:xs_pred.shape[0]]
@@ -452,6 +464,8 @@ class DiffusionForcingBase(BasePytorchAlgo):
                 dense_diff = torch.cat([first, rest], dim=0)
                 dense_rewards = dense_diff
             dense_reward = dense_rewards.reshape(-1, xs_gt.shape[1])
+        if self.denoise_reward:
+            denoise_reward = torch.stack(denoise_rewards, dim=0)    # (N_decisions, B)
 
         # Unlike original self.validation_step we have not mapped (T, B, fs*C, ...) --> (T * fs , B , C) yet.
         with torch.no_grad():
@@ -471,6 +485,8 @@ class DiffusionForcingBase(BasePytorchAlgo):
             reward = reward.unsqueeze(0).expand_as(log_probs)
             if self.step_reward:
                reward = reward + dense_reward
+            if self.denoise_reward:
+                reward = reward + denoise_reward
 
             # reward: [B]
             baseline = reward.mean() # baseline: scalar
