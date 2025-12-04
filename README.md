@@ -54,6 +54,20 @@ But, we are interested in expanding the action space to allow (i) renoising for 
 
 - `algorithm.training_schedule_matrix.positive_only=False algorithm.training_schedule_matrix.actions=5`
 
+### GAE-Based Configs
+
+Hyperparameters to the GAE algorithm given by 
+
+- `algorithm.schedule_matrix.use_gae=True`
+- `algorithm.schedule_matrix.gamma=0.99`
+- `algorithm.schedule_matrix.lam=0.95`
+- `algorithm.schedule_matrix.value_coef=0.5`
+
+### Example 
+
+`CUDA_VISIBLE_DEVICES=7 python -m main +name=testing dataset=ts_exchange algorithm=df_prediction experiment=exp_prediction wandb.mode="disabled" experiment.tasks=['training_schedule_matrix'] load="outputs/2025-11-07/05-10-26/checkpoints/epoch\=13-step\=1400.ckpt" algorithm.diffusion.sampling_timesteps=20 algorithm.chunk_size=10 algorithm.schedule_matrix.build=True algorithm.schedule_matrix.actions=5 algorithm.schedule_matrix.positive_only=False algorithm.schedule_matrix.max_roller=10 algorithm.schedule_matrix.rollout_multiple=1 algorithm.schedule_matrix.step_reward=True algorithm.schedule_matrix.difference_step_reward=True algorithm.schedule_matrix.denoise_reward=True algorithm.schedule_matrix.denoise_bonus=0.5 algorithm.schedule_matrix.entropy_beta=0.05 algorithm.schedule_matrix.use_gae=True algorithm.schedule_matrix.gamma=0.99 algorithm.schedule_matrix.lam=0.95 algorithm.schedule_matrix.value_coef=0.5 experiment.training_schedule_matrix.epochs=10 experiment.training_schedule_matrix.train_batch_size=512
+`
+
 
 # Infra instructions
 
