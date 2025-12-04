@@ -46,11 +46,11 @@ The choice of the reward function was a complex design space. While we first con
 
 ### Action-Based Configs
 
-Typical pyramidal Diffuson Forcing inference can be interpreted as taking (deterministic) noise-delta actions $a \in  \mathcal{A}$ for $\mathcal{A} =$ $\{0,1\}$ -- where tokens not getting yet denoised are given $a=0$, while tokens in the midst of the pyramid step down one level with $a=1$. In our approach, we call this setting
+Typical pyramidal Diffuson Forcing inference can be interpreted as taking (deterministic) noise-delta actions $a \in  \mathcal{A} = [0,1]$ -- where tokens not getting yet denoised are given $a=0$, while tokens in the midst of the pyramid step down one level with $a=1$. In our approach, we call this setting
 
 - `algorithm.training_schedule_matrix.positive_only=True algorithm.training_schedule_matrix.actions=2`
 
-But, we are interested in expanding the action space to allow (i) renoising for self correction and (ii) skipping noise levels for faster inference. We represent this as, for example $\mathcal{A} = \{-2, -1, 0,1, 2\}$
+But, we are interested in expanding the action space to allow (i) renoising for self correction and (ii) skipping noise levels for faster inference. We represent this as, for example $\mathcal{A} = [-2, -1, 0,1, 2]$
 
 - `algorithm.training_schedule_matrix.positive_only=False algorithm.training_schedule_matrix.actions=5`
 
