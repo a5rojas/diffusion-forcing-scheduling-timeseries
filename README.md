@@ -92,7 +92,8 @@ Chunk size and max roller (below) are other configs specifying how many columns 
 
 ## Visualizing Results
 
-We have several visualization techniques of the average distributions of actions, for example
+We have several visualization techniques of the average distributions of actions, for example, which are found in `logging_utils.py` that get called from 
+`exp_base.py`
 
 
 
