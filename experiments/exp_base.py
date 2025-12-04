@@ -25,7 +25,7 @@ from utils.print_utils import cyan, append_row_to_csv
 from utils.distributed_utils import is_rank_zero
 import matplotlib.pyplot as plt
 import wandb
-from utils.logging_utils import plot_k_matrix_history, plot_k_matrix_distribution_gif
+from utils.logging_utils import plot_k_matrix_history, plot_k_matrix_distribution_gif, plot_renoise_frequency_heatmap
 
 class BaseExperiment(ABC):
     """
@@ -317,7 +317,7 @@ class BaseLightningExperiment(BaseExperiment):
 
         print(f"Will run {self.cfg.training_schedule_matrix.epochs} epochs")
         epochs = self.cfg.training_schedule_matrix.epochs
-        for epoch in range(1):
+        for epoch in range(epochs):
             epoch_crps = []
             epoch_loss =  []
             epoch_tot_loss = []
@@ -380,7 +380,17 @@ class BaseLightningExperiment(BaseExperiment):
                         title=f"epoch_{epoch}_batch_{batch_idx}",
                         path=str(imgdir2)
                     )
-                    break
+                a_delta = out.get("a_deltas") if isinstance(out, dict) else None
+                if a_delta is not None and (batch_idx % 10 == 0):
+                    imgdir_renoise = outdir / "images_renoise_freq"
+                    imgdir_renoise.mkdir(exist_ok=True)
+
+                    fig = plot_renoise_frequency_heatmap(
+                        a_delta,
+                        title=f"renoise_freq_epoch_{epoch}_batch_{batch_idx}",
+                        path=imgdir_renoise
+                    )
+                    plt.close(fig)
 
             print("Train")
             print(f"End of epoch {epoch} avg MSE loss: ", sum(epoch_loss)/len(epoch_loss))

@@ -340,6 +340,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         # Execute the rollout, require grad if training
         frameroller = 0
         k_histories = []
+        a_deltas = []
         max_roller_mod = float('inf') if self.cfg.schedule_matrix.max_roller < 0 else self.cfg.schedule_matrix.max_roller
         while len(xs_pred) < n_frames and frameroller < max_roller_mod:
             
@@ -360,6 +361,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
             max_idx = self.sampling_timesteps - 1 # Do not exceed this noise level so that calls to DDIM are stable
             max_rl_steps = int((self.sampling_timesteps + int(horizon * self.uncertainty_scale)) * self.cfg.schedule_matrix.rollout_multiple) # Ensure finite horiuzon
             k_matrix_predicted = torch.zeros((max_rl_steps, horizon, batch_size))
+            a_deltas_predicted = torch.zeros((max_rl_steps, horizon, batch_size))
             for m in range(max_rl_steps):
                 # print(f"Taking RL step {m}")
                 z_chunk = z  # already kept as a no-grad tensor from previous steps
@@ -416,6 +418,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
                     # Action deltas map to actual decision
                     decision_tracker[t] = decision_tracker[t] + action_delta
                     decision_tracker[t] = decision_tracker[t].clamp(0, max_idx)
+                    a_deltas_predicted[m][t] = action_delta
 
                     # print(f"{m},{t} state dist is ", torch.unique(decision_tracker[t], return_counts=True))
                     # print(f"{m},{t} decision dist is ", torch.unique(action_delta, return_counts=True))
@@ -448,6 +451,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
             # print(k_matrix_predicted.mean(dim=-1))
             
             k_histories.append(k_matrix_predicted)
+            a_deltas.append(a_deltas_predicted)
             xs_pred += chunk
             rollout_lengths.append(max_rl_steps) # later with early breaking append with actual length
         
@@ -458,6 +462,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         masks = masks[:xs_pred.shape[0]]
         # Then, stack the resulting tensors
         k_histories = torch.stack(k_histories)
+        a_deltas = torch.stack(a_deltas)
         per_step_loss = torch.stack(per_step_loss)
         if self.step_reward:
             dense_rewards = torch.stack(dense_rewards)
@@ -555,7 +560,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         del log_probs, entropies, values, rewards, rollout_lengths
 
         return {"xs_pred": self._unnormalize_x(rearrange(xs_pred, "t b (fs c) ... -> (t fs) b c ...", fs=self.frame_stack)),
-                "loss": loss, "total_loss": total_loss, "k_history": k_histories.squeeze(0), "per_step_loss": per_step_loss}
+                "loss": loss, "total_loss": total_loss, "k_history": k_histories.squeeze(0), "a_deltas": a_deltas.squeeze(0), "per_step_loss": per_step_loss}
 
 
     def validate_k_step_multiple_densified(self, batch, batch_idx, namespace="train_k"):
@@ -588,6 +593,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
             # Execute the rollout
             frameroller = 0
             k_histories = []
+            a_deltas = []
             max_roller_mod = float('inf') if self.cfg.schedule_matrix.max_roller < 0 else self.cfg.schedule_matrix.max_roller
             while len(xs_pred) < n_frames and frameroller < max_roller_mod:
                 
@@ -608,6 +614,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
                 max_idx = self.sampling_timesteps - 1 # Do not exceed this noise level so that calls to DDIM are stable
                 max_rl_steps = int((self.sampling_timesteps + int(horizon * self.uncertainty_scale)) * self.cfg.schedule_matrix.rollout_multiple) # Ensure finite horiuzon
                 k_matrix_predicted = torch.zeros((max_rl_steps, horizon, batch_size))
+                a_deltas_predicted = torch.zeros((max_rl_steps, horizon, batch_size))
                 for m in range(max_rl_steps):
                     # print(f"Taking RL step {m}")
                     z_chunk = z  # already kept as a no-grad tensor from previous steps
@@ -664,6 +671,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
                         # Action deltas map to actual decision
                         decision_tracker[t] = decision_tracker[t] + action_delta
                         decision_tracker[t] = decision_tracker[t].clamp(0, max_idx)
+                        a_deltas_predicted[m][t] = action_delta
 
                         # print(f"{m},{t} state dist is ", torch.unique(decision_tracker[t], return_counts=True))
                         # print(f"{m},{t} decision dist is ", torch.unique(action_delta, return_counts=True))
@@ -697,6 +705,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
                 # print(k_matrix_predicted.mean(dim=-1))
                 
                 k_histories.append(k_matrix_predicted)
+                a_deltas.append(a_deltas_predicted)
                 xs_pred += chunk
                 rollout_lengths.append(max_rl_steps) # later with early breaking append with actual length
 
@@ -706,6 +715,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         masks = masks[:xs_pred.shape[0]]
         # Then, stack the resulting tensors
         k_histories = torch.stack(k_histories)
+        a_deltas = torch.stack(a_deltas)
         per_help_loss = torch.stack(per_step_loss)
         if self.step_reward:
             dense_rewards = torch.stack(dense_rewards)
@@ -812,7 +822,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         del log_probs, entropies, values, rewards, rollout_lengths
 
         return {"xs_pred": self._unnormalize_x(rearrange(xs_pred, "t b (fs c) ... -> (t fs) b c ...", fs=self.frame_stack)),
-                "loss": loss, "crps": crps_batch.item(), "total_loss": total_loss, "k_history": k_histories.squeeze(0), "per_step_loss": per_help_loss}
+                "loss": loss, "crps": crps_batch.item(), "total_loss": total_loss, "k_history": k_histories.squeeze(0), "a_deltas": a_deltas.squeeze(0), "per_step_loss": per_help_loss}
 
     
     @property

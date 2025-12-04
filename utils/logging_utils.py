@@ -869,3 +869,53 @@ def plot_k_matrix_distribution_gif(
         gif_path = None
 
     return gif_path, frame_paths
+
+def plot_renoise_frequency_heatmap(
+    a_deltas: torch.Tensor,
+    title: str = None,
+    path: str | Path = None,
+):
+    """
+    Plot heatmap of how often the action was negative (renoising)
+    across batch for each (m, t).
+
+    Args:
+        a_deltas: Tensor of shape (M, T, B)
+        title: optional plot title
+        path: directory to save PNG
+    """
+    a_cpu = a_deltas.detach().cpu()
+
+    # Compute frequency that actions < 0 across batch
+    # shape: (M, T)
+    freq_negative = (a_cpu < 0).float().mean(dim=2)
+    print("Shape of A cpu is ", a_cpu.shape)
+    print("Shape of freq negative is ", freq_negative.shape)
+    print(freq_negative)
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    im = ax.imshow(
+        freq_negative,
+        aspect="auto",
+        interpolation="nearest",
+        cmap="magma",
+        vmin=0.0,
+        vmax=1.0,
+    )
+
+    ax.set_xlabel("Horizon index t")
+    ax.set_ylabel("RL step m")
+    if title:
+        ax.set_title(title)
+
+    fig.colorbar(im, ax=ax, label="Frequency of negative action")
+    fig.tight_layout()
+
+    if path is not None:
+        path = Path(path)
+        path.mkdir(exist_ok=True)
+        save_path = path / f"{title}.png"
+        plt.savefig(save_path)
+        print("Saved renoise-frequency heatmap to:", save_path)
+
+    return fig
