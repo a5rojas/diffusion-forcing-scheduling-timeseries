@@ -60,6 +60,8 @@ class DiffusionForcingBase(BasePytorchAlgo):
         self.gamma = getattr(cfg.schedule_matrix, "gamma", 0.99)
         self.lam = getattr(cfg.schedule_matrix, "lam", 0.95)
         self.value_coef = getattr(cfg.schedule_matrix, "value_coef", 0.5)
+        self.entropy_beta = getattr(cfg.schedule_matrix, "value_coef", 0.5)
+
 
         super().__init__(cfg)
 
@@ -909,4 +911,3 @@ class DiffusionForcingBase(BasePytorchAlgo):
             crps_vals[b] = crps_b
 
         return crps_vals
-    
