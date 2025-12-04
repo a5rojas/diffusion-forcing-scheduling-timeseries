@@ -32,6 +32,8 @@ For any other dataset (ts_electricity, etc.) we just change name and dataset in 
 
 `python -m main +name=ts_exchange dataset=ts_exchange algorithm=df_prediction experiment=exp_prediction experiment.tasks=["validation", "test"] algorithm.diffusion.sampling_steps=20 load="checkpoint_path.ckpt"` given we had saved the training run in `"checkpoint_path.ckpt"`. These training runs are also used in our RL part.
 
+At a high level, the call to main triggers an "experiment" (`experiments/exp_base.py` in our RL training, where we iterate over data loaders, cache/visulize results) and within the "experiment" we make calls to "algorithm" (`algorithms/diffusion_forcing/df_base.py` in our RL training, where we conduct the on-policy rollouts and backpropagate using REINFORCE/GAE). Our code for the policy/value networks for RL live in `algorithms/diffusion_forcing/models/diffusion_transition.py` and plotting utilities live in `logging_utils.py` 
+
 ## Training RL Denoisers
 
 There are numerous design choices in our environment that we can assign each one a separate hydra argument to and append it to `python -m main ... experiment.tasks=["training_schedule_matrix"]`, allowing us to ablate across many hyperparameters. 
@@ -69,6 +71,10 @@ Chunk size and max roller (below) are other configs specifying how many columns 
 
 `CUDA_VISIBLE_DEVICES=7 python -m main +name=testing dataset=ts_exchange algorithm=df_prediction experiment=exp_prediction wandb.mode="disabled" experiment.tasks=['training_schedule_matrix'] load="outputs/2025-11-07/05-10-26/checkpoints/epoch\=13-step\=1400.ckpt" algorithm.diffusion.sampling_timesteps=20 algorithm.chunk_size=-1 algorithm.schedule_matrix.build=True algorithm.schedule_matrix.actions=5 algorithm.schedule_matrix.positive_only=False algorithm.schedule_matrix.max_roller=10 algorithm.schedule_matrix.rollout_multiple=1 algorithm.schedule_matrix.step_reward=True algorithm.schedule_matrix.difference_step_reward=True algorithm.schedule_matrix.denoise_reward=True algorithm.schedule_matrix.denoise_bonus=0.5 algorithm.schedule_matrix.entropy_beta=0.05 algorithm.schedule_matrix.use_gae=True algorithm.schedule_matrix.gamma=0.99 algorithm.schedule_matrix.lam=0.95 algorithm.schedule_matrix.value_coef=0.5 experiment.training_schedule_matrix.epochs=10 experiment.training_schedule_matrix.train_batch_size=512
 `
+
+## Visualizing Results
+
+We have several visualization techniques of the average distributions of actions, for example
 
 
 # Infra instructions
