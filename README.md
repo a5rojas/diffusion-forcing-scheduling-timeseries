@@ -28,9 +28,9 @@ pip install -r requirements.txt
 Train model with command:
 `python -m main +name=ts_exchange dataset=ts_exchange algorithm=df_prediction experiment=exp_prediction`
 
-For any other dataset (ts_electricity, etc.) we just change name and dataset in this command. We can evaluate and test models with 
+For any other dataset (ts_electricity, etc.) we just change name and dataset in this command. We can evaluate and test models with the pyramidal denoising schedule using the command (for example with 20 diffusion sampling steps):  
 
-`python -m main +name=ts_exchange dataset=ts_exchange algorithm=df_prediction experiment=exp_prediction experiment.tasks=["validation", "test"]`
+`python -m main +name=ts_exchange dataset=ts_exchange algorithm=df_prediction experiment=exp_prediction experiment.tasks=["validation", "test"] algorithm.diffusion.sampling_steps=20`
 
 ## Training RL Denoisers
 
@@ -38,7 +38,13 @@ There are numerous design choices in our environment that we can assign each one
 
 ### Reward-Based Configs
 
-$\frac{1}{z}$
+The choice of the reward function was a complex design space. While we first considered CRPS-based rewards, the data overhead (because it is an ensemble method) was not justified by improved performance, so we removed those flags. More recently, we considered MSE-based rewards (at the end of the K matrix and a denser per-row version), denoising-encouraging rewards, and entropy rewards. By default, we always have a (negative) MSE reward comparing the final synthesized vector (after denoising completes) to the ground truth. The variable portions are:
+
+- Whether to include a step-wise (denser) reward after each row of the matrix, where we compare the noisy iterate to ground truth with MSE (` algorithm.schedule_matrix.step_reward=True/False`) and whether to difference the result of that (ie to see how MSE after 3 rows of K compares to MSE after 4 rows of K instead of the raw values, using ` algorithm.schedule_matrix.difference_step_reward=True/False`)
+- Entropy of the policy distribution (with weight `algorithm.training_schedule_matrix.entropy_beta=0.01`
+- Whether to use a reward that encourages taking positive actions, in order to encourage completing the denosing process (both quickly and entirely) because incomplete denoising will likely be detrimental (with `algorihtm.training_schedule_matrix.denoise_reward=True/False` `algorihtm.training_schedule_matrix.denoise_bonus=0.1`).
+
+### Action-Based Configs
 
 # Infra instructions
 
