@@ -32,6 +32,14 @@ For any other dataset (ts_electricity, etc.) we just change name and dataset in 
 
 `python -m main +name=ts_exchange dataset=ts_exchange algorithm=df_prediction experiment=exp_prediction experiment.tasks=["validation", "test"]`
 
+## Training RL Denoisers
+
+There are numerous design choices in our environment that we can assign each one a separate hydra argument to and append it to `python -m main ... experiment.tasks=["training_schedule_matrix"]`, allowing us to ablate across many hyperparameters. 
+
+### Reward-Based Configs
+
+$\frac{1}{z}$
+
 # Infra instructions
 
 This repo is forked from [Boyuan Chen](https://boyuan.space/)'s research template [repo](https://github.com/buoyancy99/research-template). By its MIT license, you must keep the above sentence in `README.md` and the `LICENSE` file to credit the author.
