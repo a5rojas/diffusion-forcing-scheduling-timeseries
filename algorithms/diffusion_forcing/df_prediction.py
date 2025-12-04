@@ -95,7 +95,7 @@ class DiffusionForcingPrediction(DiffusionForcingBase):
         nonterminals = torch.ones(batch[0].shape[0], batch[0].shape[1]).to(self.device)
         batch.append(nonterminals)
         return super().validate_k_step_multiple_densified(batch, batch_idx, namespace=namespace) # intentional call to validaton
-
+    
     def on_validation_epoch_end(self, namespace="validation", log_visualizations=False) -> None:
         if not self.validation_step_outputs:
             return
