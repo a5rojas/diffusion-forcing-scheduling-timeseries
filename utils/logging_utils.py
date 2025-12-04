@@ -889,7 +889,6 @@ def plot_renoise_frequency_heatmap(
     # Compute frequency that actions < 0 across batch
     # shape: (M, T)
     freq_negative = (a_cpu < 0).float().mean(dim=2)
-    print(freq_negative)
 
     fig, ax = plt.subplots(figsize=(6, 4))
     im = ax.imshow(
