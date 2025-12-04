@@ -1,31 +1,14 @@
-# RL for Controllable Uncertainty in Diffusion Forcing
+# CSE 291: RL for Controllable Uncertainty in Diffusion Forcing
+
+## Branched from Diffusion Forcing: Next-token Prediction Meets Full-Sequence Diffusion (https://arxiv.org/abs/2407.01392)
+
 
 This repo is forked from [Boyuan Chen](https://boyuan.space/)'s research template [repo](https://github.com/buoyancy99/research-template). By its MIT license, you must keep the above sentence in `README.md` and the `LICENSE` file to credit the author.
 
 All experiments can be launched via `python -m main [options]` where you can fine more details in the following paragraphs.
 
-## Pass in arguments
 
-We use [hydra](https://hydra.cc) instead of `argparse` to configure arguments at every code level. You can both write a static config in `configuration` folder or, at runtime,
-[override part of yur static config](https://hydra.cc/docs/tutorials/basic/your_first_app/simple_cli/) with command line arguments.
-
-For example, arguments `algorithm=df_prediction algorithm.diffusion.network_size=32` will override the `network_size` variable in `configurations/algorithm/df_prediction.yaml`.
-
-All static config and runtime override will be logged to wandb automatically.
-
-## Resume a checkpoint & logging
-
-All checkpoints and logs are logged to cloud automatically so you can resume them on another server. Simply append `resume=[wandb_run_id]` to your command line arguments to resume it. The run_id can be founded in a url of a wandb run in wandb dashboard.
-
-On the other hand, sometimes you may want to start a new run with different run id but still load a prior ckpt. This can be done by setting the `load=[wandb_run_id / ckpt path]` flag.
-
-
-### Branched from Diffusion Forcing: Next-token Prediction Meets Full-Sequence Diffusion (https://arxiv.org/abs/2407.01392)
-
-
-# CSE 291 Project Instructions
-
-## Setup
+## Main Instructions for CSE 291
 
 Create conda environment:
 
@@ -53,6 +36,21 @@ For any other dataset (ts_electricity, etc.) we just change name and dataset in 
 `python -m main +name=ts_exchange dataset=ts_exchange algorithm=df_prediction experiment=exp_prediction experiment.tasks=["validation", "test"] algorithm.diffusion.sampling_steps=20 load="checkpoint_path.ckpt"` given we had saved the training run in `"checkpoint_path.ckpt"`. These training runs are also used in our RL part.
 
 At a high level, the call to main triggers an "experiment" (`experiments/exp_base.py` in our RL training, where we iterate over data loaders, cache/visulize results) and within the "experiment" we make calls to "algorithm" (`algorithms/diffusion_forcing/df_base.py` in our RL training, where we conduct the on-policy rollouts and backpropagate using REINFORCE/GAE). Our code for the policy/value networks for RL live in `algorithms/diffusion_forcing/models/diffusion_transition.py` and plotting utilities live in `logging_utils.py` 
+
+#### Pass in arguments
+
+We use [hydra](https://hydra.cc) instead of `argparse` to configure arguments at every code level. You can both write a static config in `configuration` folder or, at runtime,
+[override part of yur static config](https://hydra.cc/docs/tutorials/basic/your_first_app/simple_cli/) with command line arguments.
+
+For example, arguments `algorithm=df_prediction algorithm.diffusion.network_size=32` will override the `network_size` variable in `configurations/algorithm/df_prediction.yaml`.
+
+All static config and runtime override will be logged to wandb automatically.
+
+### Resume a checkpoint & logging
+
+All checkpoints and logs are logged to cloud automatically so you can resume them on another server. Simply append `resume=[wandb_run_id]` to your command line arguments to resume it. The run_id can be founded in a url of a wandb run in wandb dashboard.
+
+On the other hand, sometimes you may want to start a new run with different run id but still load a prior ckpt. This can be done by setting the `load=[wandb_run_id / ckpt path]` flag.
 
 ## Training RL Denoisers
 
