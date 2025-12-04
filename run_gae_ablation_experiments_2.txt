@@ -1,0 +1,223 @@
+EXPERIMENTS = [
+    # -------------------------------------------------
+    # GROUP A: Action-space & entropy ablation with GAE
+    # Base env: (T, chunk, roller) = (10, 10, 10)
+    # -------------------------------------------------
+
+    # 2-action: {0, 1}, GAE, "good" hyperparams
+    {
+        "name": "gae_actions2_beta0.05",
+        "overrides": [
+            "algorithm.schedule_matrix.actions=2",
+            "algorithm.schedule_matrix.positive_only=True",
+            "algorithm.schedule_matrix.entropy_beta=0.05",
+            "algorithm.schedule_matrix.use_gae=True",
+            "algorithm.schedule_matrix.lam=0.95",
+            "algorithm.schedule_matrix.value_coef=0.5",
+        ],
+    },
+    {
+        "name": "gae_actions2_beta0.10",
+        "overrides": [
+            "algorithm.schedule_matrix.actions=2",
+            "algorithm.schedule_matrix.positive_only=True",
+            "algorithm.schedule_matrix.entropy_beta=0.10",
+            "algorithm.schedule_matrix.use_gae=True",
+            "algorithm.schedule_matrix.lam=0.95",
+            "algorithm.schedule_matrix.value_coef=0.5",
+        ],
+    },
+
+    # 3-action: {-1, 0, 1}, GAE
+    {
+        "name": "gae_actions3_beta0.05",
+        "overrides": [
+            "algorithm.schedule_matrix.actions=3",
+            "algorithm.schedule_matrix.positive_only=False",
+            "algorithm.schedule_matrix.entropy_beta=0.05",
+            "algorithm.schedule_matrix.use_gae=True",
+            "algorithm.schedule_matrix.lam=0.95",
+            "algorithm.schedule_matrix.value_coef=0.5",
+        ],
+    },
+    {
+        "name": "gae_actions3_beta0.10",
+        "overrides": [
+            "algorithm.schedule_matrix.actions=3",
+            "algorithm.schedule_matrix.positive_only=False",
+            "algorithm.schedule_matrix.entropy_beta=0.10",
+            "algorithm.schedule_matrix.use_gae=True",
+            "algorithm.schedule_matrix.lam=0.95",
+            "algorithm.schedule_matrix.value_coef=0.5",
+        ],
+    },
+
+    # 5-action: {-2, -1, 0, 1, 2}, GAE (matches teammate's “best REINFORCE” setting)
+    # You already tested some lam/value/beta here, but these keep the best region and
+    # give you clean comparisons with other action spaces.
+    {
+        "name": "gae_actions5_beta0.05",
+        "overrides": [
+            "algorithm.schedule_matrix.actions=5",
+            "algorithm.schedule_matrix.positive_only=False",
+            "algorithm.schedule_matrix.entropy_beta=0.05",
+            "algorithm.schedule_matrix.use_gae=True",
+            "algorithm.schedule_matrix.lam=0.95",
+            "algorithm.schedule_matrix.value_coef=0.5",
+        ],
+    },
+    {
+        "name": "gae_actions5_beta0.10",
+        "overrides": [
+            "algorithm.schedule_matrix.actions=5",
+            "algorithm.schedule_matrix.positive_only=False",
+            "algorithm.schedule_matrix.entropy_beta=0.10",
+            "algorithm.schedule_matrix.use_gae=True",
+            "algorithm.schedule_matrix.lam=0.95",
+            "algorithm.schedule_matrix.value_coef=0.5",
+        ],
+    },
+
+    # -------------------------------------------------
+    # GROUP B: Horizon / environment size ablation
+    # Match teammate’s (T, C, R) grids but with GAE.
+    # -------------------------------------------------
+
+    # (T, C, R) = (10, 10, 10) baseline (you already have these, but this is the GAE “anchor”)
+    {
+        "name": "gae_T10C10R10_actions5",
+        "overrides": [
+            "algorithm.diffusion.sampling_timesteps=10",
+            "algorithm.chunk_size=10",
+            "algorithm.schedule_matrix.max_roller=10",
+            "algorithm.schedule_matrix.actions=5",
+            "algorithm.schedule_matrix.positive_only=False",
+            "algorithm.schedule_matrix.rollout_multiple=1",
+            "algorithm.schedule_matrix.entropy_beta=0.05",
+            "algorithm.schedule_matrix.use_gae=True",
+            "algorithm.schedule_matrix.lam=0.95",
+            "algorithm.schedule_matrix.value_coef=0.5",
+        ],
+    },
+
+    # (T, C, R) = (20, 20, 20) – deeper diffusion, longer rollout
+    {
+        "name": "gae_T20C20R20_actions5",
+        "overrides": [
+            "algorithm.diffusion.sampling_timesteps=20",
+            "algorithm.chunk_size=20",
+            "algorithm.schedule_matrix.max_roller=20",
+            "algorithm.schedule_matrix.actions=5",
+            "algorithm.schedule_matrix.positive_only=False",
+            "algorithm.schedule_matrix.rollout_multiple=1",
+            "algorithm.schedule_matrix.entropy_beta=0.05",
+            "algorithm.schedule_matrix.use_gae=True",
+            "algorithm.schedule_matrix.lam=0.95",
+            "algorithm.schedule_matrix.value_coef=0.5",
+        ],
+    },
+
+    # (T, C, R) = (10, 10, 10) but longer RL horizon: rollout_multiple = 2
+    # (mirrors teammate’s “double time” experiments)
+    {
+        "name": "gae_T10C10R10_actions5_roll2",
+        "overrides": [
+            "algorithm.diffusion.sampling_timesteps=10",
+            "algorithm.chunk_size=10",
+            "algorithm.schedule_matrix.max_roller=10",
+            "algorithm.schedule_matrix.rollout_multiple=2",
+            "algorithm.schedule_matrix.actions=5",
+            "algorithm.schedule_matrix.positive_only=False",
+            "algorithm.schedule_matrix.entropy_beta=0.05",
+            "algorithm.schedule_matrix.use_gae=True",
+            "algorithm.schedule_matrix.lam=0.95",
+            "algorithm.schedule_matrix.value_coef=0.5",
+        ],
+    },
+
+    # (T, C, R) = (20, 20, 20) with rollout_multiple = 2
+    {
+        "name": "gae_T20C20R20_actions5_roll2",
+        "overrides": [
+            "algorithm.diffusion.sampling_timesteps=20",
+            "algorithm.chunk_size=20",
+            "algorithm.schedule_matrix.max_roller=20",
+            "algorithm.schedule_matrix.rollout_multiple=2",
+            "algorithm.schedule_matrix.actions=5",
+            "algorithm.schedule_matrix.positive_only=False",
+            "algorithm.schedule_matrix.entropy_beta=0.05",
+            "algorithm.schedule_matrix.use_gae=True",
+            "algorithm.schedule_matrix.lam=0.95",
+            "algorithm.schedule_matrix.value_coef=0.5",
+        ],
+    },
+
+    # -------------------------------------------------
+    # GROUP C: Reward-shaping ablations with GAE
+    # Compare step-wise vs final reward, differencing, denoise bonus.
+    # -------------------------------------------------
+
+    # 1) No denoise bonus (keep step + differenced)
+    {
+        "name": "gae_no_denoise_bonus",
+        "overrides": [
+            "algorithm.schedule_matrix.actions=5",
+            "algorithm.schedule_matrix.positive_only=False",
+            "algorithm.diffusion.sampling_timesteps=10",
+            "algorithm.chunk_size=10",
+            "algorithm.schedule_matrix.max_roller=10",
+            "algorithm.schedule_matrix.rollout_multiple=1",
+            "algorithm.schedule_matrix.step_reward=True",
+            "algorithm.schedule_matrix.difference_step_reward=True",
+            "algorithm.schedule_matrix.denoise_reward=False",
+            "algorithm.schedule_matrix.denoise_bonus=0.0",
+            "algorithm.schedule_matrix.entropy_beta=0.05",
+            "algorithm.schedule_matrix.use_gae=True",
+            "algorithm.schedule_matrix.lam=0.95",
+            "algorithm.schedule_matrix.value_coef=0.5",
+        ],
+    },
+
+    # 2) No differencing of step rewards (pure step-wise MSE)
+    {
+        "name": "gae_step_reward_nodiff",
+        "overrides": [
+            "algorithm.schedule_matrix.actions=5",
+            "algorithm.schedule_matrix.positive_only=False",
+            "algorithm.diffusion.sampling_timesteps=10",
+            "algorithm.chunk_size=10",
+            "algorithm.schedule_matrix.max_roller=10",
+            "algorithm.schedule_matrix.rollout_multiple=1",
+            "algorithm.schedule_matrix.step_reward=True",
+            "algorithm.schedule_matrix.difference_step_reward=False",
+            "algorithm.schedule_matrix.denoise_reward=True",
+            "algorithm.schedule_matrix.denoise_bonus=0.1",
+            "algorithm.schedule_matrix.entropy_beta=0.05",
+            "algorithm.schedule_matrix.use_gae=True",
+            "algorithm.schedule_matrix.lam=0.95",
+            "algorithm.schedule_matrix.value_coef=0.5",
+        ],
+    },
+
+    # 3) Final MSE reward only (no step-wise reward at all).
+    #   This directly compares “pure episodic GAE” vs “densified GAE”.
+    {
+        "name": "gae_final_only",
+        "overrides": [
+            "algorithm.schedule_matrix.actions=5",
+            "algorithm.schedule_matrix.positive_only=False",
+            "algorithm.diffusion.sampling_timesteps=10",
+            "algorithm.chunk_size=10",
+            "algorithm.schedule_matrix.max_roller=10",
+            "algorithm.schedule_matrix.rollout_multiple=1",
+            "algorithm.schedule_matrix.step_reward=False",
+            "algorithm.schedule_matrix.difference_step_reward=False",
+            "algorithm.schedule_matrix.denoise_reward=False",
+            "algorithm.schedule_matrix.denoise_bonus=0.0",
+            "algorithm.schedule_matrix.entropy_beta=0.05",
+            "algorithm.schedule_matrix.use_gae=True",
+            "algorithm.schedule_matrix.lam=0.95",
+            "algorithm.schedule_matrix.value_coef=0.5",
+        ],
+    },
+]
