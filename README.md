@@ -14,7 +14,7 @@ conda create python=3.10 -n diffusion_forcing
 conda activate diffusion_forcing
 ```
 
-Install dependencies for time series, video and robotics:
+Install dependencies for time series:
 
 ```
 pip install -r requirements.txt
