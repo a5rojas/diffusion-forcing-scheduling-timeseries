@@ -10,6 +10,11 @@ import matplotlib.pyplot as plt
 from tqdm import trange, tqdm
 import matplotlib.animation as animation
 from pathlib import Path
+try:
+    import imageio.v2 as imageio   # new imageio API
+except ImportError:
+    imageio = None
+    print("Warning: imageio not installed; GIFs will not be created.")
 
 plt.set_loglevel("warning")
 
@@ -765,3 +770,102 @@ if __name__ == "__main__":
     img = render_ball_contours_and_center(img, center, contours)
     plt.imshow(img)
     plt.show()
+
+def plot_k_matrix_distribution_gif(
+    k_history: torch.Tensor,
+    max_diffusion_level: int,
+    title: str = None,
+    path: str | Path = None,
+    fps: int = 4,
+    max_frames: int | None = None,
+):
+    """
+    Visualize the *distribution* of noise indices across the batch for each
+    (step r, horizon t) pair as a GIF.
+
+    k_history: Tensor of shape (steps, horizon, batch) or (steps, batch).
+               Values should be integer noise indices.
+    max_diffusion_level: largest diffusion index (used to set y-axis / bins).
+    title: base name for saved files (PNG frames + GIF).
+    path: directory where the frames and GIF will be saved.
+    fps: frames per second for the GIF.
+    max_frames: optionally limit the number of steps (rows) to visualize.
+    """
+    if path is None:
+        path = "."
+    outdir = Path(path)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    if title is None:
+        title = "k_history_dist"
+
+    # Move to CPU and ensure integer type
+    k_cpu = k_history.detach().cpu().long()
+
+    # Normalize shapes
+    if k_cpu.dim() == 2:
+        # (steps, batch) -> (steps, horizon=1, batch)
+        steps, batch = k_cpu.shape
+        horizon = 1
+        k_cpu = k_cpu.unsqueeze(1)
+    elif k_cpu.dim() == 3:
+        steps, horizon, batch = k_cpu.shape
+    else:
+        raise ValueError(f"Expected k_history dim 2 or 3, got {k_cpu.dim()}")
+
+    # How many frames to render
+    if max_frames is None:
+        max_frames = steps
+    max_frames = min(max_frames, steps)
+
+    frame_paths = []
+
+    # Precompute bin range for consistency
+    # indices are typically in [0, max_idx], so bins = 0..max_diffusion_level
+    num_bins = max_diffusion_level + 1
+
+    for r in range(max_frames):
+        # counts_per_t: tensor of shape (num_bins, horizon)
+        counts_per_t = []
+        for t in range(horizon):
+            vals = k_cpu[r, t]  # shape: (batch,)
+            # histogram over [0, max_diffusion_level]
+            counts = torch.bincount(vals.clamp(0, max_diffusion_level),
+                                    minlength=num_bins)
+            counts_per_t.append(counts)
+
+        # Stack over horizon: (horizon, num_bins) -> transpose to (num_bins, horizon)
+        counts_per_t = torch.stack(counts_per_t, dim=0).T  # (num_bins, horizon)
+        counts_np = counts_per_t.numpy()
+
+        # Plot heatmap for this step r
+        fig, ax = plt.subplots(figsize=(7, 5))
+        im = ax.imshow(
+            counts_np,
+            aspect="auto",
+            origin="lower",
+            interpolation="nearest",
+            cmap="magma"
+        )
+        ax.set_xlabel("Rollout horizon t")
+        ax.set_ylabel("Noise index k")
+        ax.set_title(f"{title} – step {r}/{max_frames-1}")
+        fig.colorbar(im, ax=ax, label="Count in batch")
+        fig.tight_layout()
+
+        frame_path = outdir / f"{title}_frame_{r:04d}.png"
+        fig.savefig(frame_path)
+        plt.close(fig)
+        frame_paths.append(frame_path)
+
+    gif_path = outdir / f"{title}.gif"
+    if imageio is not None:
+        # Assemble GIF
+        images = [imageio.imread(fp) for fp in frame_paths]
+        imageio.mimsave(gif_path, images, duration=1.0 / fps)
+        print(f"Saved GIF to {gif_path}")
+    else:
+        print("imageio not available; saved PNG frames only.")
+        gif_path = None
+
+    return gif_path, frame_paths

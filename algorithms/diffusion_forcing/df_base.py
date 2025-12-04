@@ -329,6 +329,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         z = init_z
         xs_pred, log_probs, entropies, values, rollout_lengths = [], [], [], [], []
         rewards, dense_rewards, denoise_rewards, = [], [], []
+        per_step_loss = []
 
         # Warm up the context
         with torch.no_grad():
@@ -432,16 +433,17 @@ class DiffusionForcingBase(BasePytorchAlgo):
                     k_matrix_predicted[m][t] = decision_tracker[t]
 
                 # get post m-step rewards now
-                if self.step_reward:
-                    with torch.no_grad():
-                        stacked_chunk = torch.stack(chunk)
-                        stacked_x = xs[len(xs_pred):len(xs_pred) + horizon] # (Horizon, B, C)
-
+                with torch.no_grad():
+                    stacked_chunk = torch.stack(chunk)
+                    stacked_x = xs[len(xs_pred):len(xs_pred) + horizon] # (Horizon, B, C)
+                    step_loss = F.mse_loss(stacked_chunk, stacked_x, reduction="none")
+                    if self.step_reward:
                         # we made t deicsions that round and will allocate 
-                        step_loss = F.mse_loss(stacked_chunk, stacked_x, reduction="none")
                         rl_reweighed_step_loss = self.reweigh_loss_rl(step_loss, masks[len(xs_pred):len(xs_pred) + horizon])
                         rl_reweighed_step_loss = rl_reweighed_step_loss.unsqueeze(0).expand(horizon, -1)# (B) --> (1,B)--> (N_DEC_IN_M, B), assuming N_DEC equal to horizon
                         dense_rewards.append(-rl_reweighed_step_loss) # (N_DEC, B_eff)
+                    standard_reweighed_step_loss = self.reweigh_loss(step_loss, masks[len(xs_pred):len(xs_pred) + horizon])
+                    per_step_loss.append(standard_reweighed_step_loss.detach().cpu())
 
             # print(k_matrix_predicted.mean(dim=-1))
             
@@ -456,6 +458,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         masks = masks[:xs_pred.shape[0]]
         # Then, stack the resulting tensors
         k_histories = torch.stack(k_histories)
+        per_step_loss = torch.stack(per_step_loss)
         if self.step_reward:
             dense_rewards = torch.stack(dense_rewards)
             if self.difference_step_reward:
@@ -552,7 +555,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         del log_probs, entropies, values, rewards, rollout_lengths
 
         return {"xs_pred": self._unnormalize_x(rearrange(xs_pred, "t b (fs c) ... -> (t fs) b c ...", fs=self.frame_stack)),
-                "loss": loss, "total_loss": total_loss, "k_history": k_histories.squeeze(0)}
+                "loss": loss, "total_loss": total_loss, "k_history": k_histories.squeeze(0), "per_step_loss": per_step_loss}
 
 
     def validate_k_step_multiple_densified(self, batch, batch_idx, namespace="train_k"):
@@ -573,6 +576,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         z = init_z
         xs_pred, log_probs, entropies, values, rollout_lengths = [], [], [], [], []
         rewards, dense_rewards, denoise_rewards, = [], [], []
+        per_step_loss = []
 
         # Warm up the context
         with torch.no_grad():
@@ -677,16 +681,18 @@ class DiffusionForcingBase(BasePytorchAlgo):
                         k_matrix_predicted[m][t] = decision_tracker[t]
 
                     # get post m-step rewards now
-                    if self.step_reward:
-                        with torch.no_grad():
-                            stacked_chunk = torch.stack(chunk)
-                            stacked_x = xs[len(xs_pred):len(xs_pred) + horizon] # (Horizon, B, C)
-
+                    with torch.no_grad():
+                        stacked_chunk = torch.stack(chunk)
+                        stacked_x = xs[len(xs_pred):len(xs_pred) + horizon] # (Horizon, B, C)
+                        step_loss = F.mse_loss(stacked_chunk, stacked_x, reduction="none")
+                        if self.step_reward:
                             # we made t deicsions that round and will allocate 
-                            step_loss = F.mse_loss(stacked_chunk, stacked_x, reduction="none")
                             rl_reweighed_step_loss = self.reweigh_loss_rl(step_loss, masks[len(xs_pred):len(xs_pred) + horizon])
                             rl_reweighed_step_loss = rl_reweighed_step_loss.unsqueeze(0).expand(horizon, -1)# (B) --> (1,B)--> (N_DEC_IN_M, B), assuming N_DEC equal to horizon
                             dense_rewards.append(-rl_reweighed_step_loss) # (N_DEC, B_eff)
+                        standard_reweighed_step_loss = self.reweigh_loss(step_loss, masks[len(xs_pred):len(xs_pred) + horizon])
+                        per_step_loss.append(standard_reweighed_step_loss.detach().cpu())
+
 
                 # print(k_matrix_predicted.mean(dim=-1))
                 
@@ -700,6 +706,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         masks = masks[:xs_pred.shape[0]]
         # Then, stack the resulting tensors
         k_histories = torch.stack(k_histories)
+        per_help_loss = torch.stack(per_step_loss)
         if self.step_reward:
             dense_rewards = torch.stack(dense_rewards)
             if self.difference_step_reward:
@@ -805,7 +812,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         del log_probs, entropies, values, rewards, rollout_lengths
 
         return {"xs_pred": self._unnormalize_x(rearrange(xs_pred, "t b (fs c) ... -> (t fs) b c ...", fs=self.frame_stack)),
-                "loss": loss, "crps": crps_batch.item(), "total_loss": total_loss, "k_history": k_histories.squeeze(0)}
+                "loss": loss, "crps": crps_batch.item(), "total_loss": total_loss, "k_history": k_histories.squeeze(0), "per_step_loss": per_help_loss}
 
     
     @property

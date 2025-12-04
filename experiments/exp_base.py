@@ -25,7 +25,7 @@ from utils.print_utils import cyan, append_row_to_csv
 from utils.distributed_utils import is_rank_zero
 import matplotlib.pyplot as plt
 import wandb
-from utils.logging_utils import plot_k_matrix_history
+from utils.logging_utils import plot_k_matrix_history, plot_k_matrix_distribution_gif
 
 class BaseExperiment(ABC):
     """
@@ -283,8 +283,11 @@ class BaseLightningExperiment(BaseExperiment):
         logdir.mkdir(exist_ok=True)
 
         train_csv = logdir / "train_log.csv"
+        train_step_csv = logdir/ "train_step_log.csv"
         val_csv   = logdir / "val_log.csv"
+        val_step_csv = logdir/ "val_step_log.csv"
         test_csv  = logdir / "test_log.csv"
+        test_step_csv = logdir / "test_step_log.csv"
 
         # Initialize models and load state dics
         if not self.algo:
@@ -313,23 +316,26 @@ class BaseLightningExperiment(BaseExperiment):
         self.multiply_denoise_bonus = self.algo.cfg.schedule_matrix.multiply_denoise_bonus
 
         print(f"Will run {self.cfg.training_schedule_matrix.epochs} epochs")
-        for epoch in range(self.cfg.training_schedule_matrix.epochs):
+        epochs = self.cfg.training_schedule_matrix.epochs
+        for epoch in range(1):
             epoch_crps = []
             epoch_loss =  []
             epoch_tot_loss = []
+            epoch_loss_per_step = []
             for batch_idx, batch in enumerate(train_dataloader):
 
                 # on policy and take step
                 self.policy_opt.zero_grad()
                 out = self.algo.train_k_step_multiple_densified(batch, batch_idx)
-                
                 mse_val   = out["loss"].detach().cpu().item()
                 # crps_val  = out["crps"]
                 pol_val   = out["total_loss"].detach().cpu().item()
+                per_step_loss = out["per_step_loss"]
 
                 # epoch_crps.append(crps_val)
                 epoch_loss.append(mse_val)
                 epoch_tot_loss.append(pol_val)
+                epoch_loss_per_step.append(per_step_loss)
 
                 self.policy_opt.step()
                 self.train_k_global_step += 1
@@ -348,48 +354,54 @@ class BaseLightningExperiment(BaseExperiment):
                     }
                 )
 
+                append_row_to_csv(
+                    train_step_csv,
+                    {f"step_{k}":per_step_loss[k].item()  for k in range(len(per_step_loss))}
+                )
+
                 # log the k history if we want
                 k_history = out.get("k_history") if isinstance(out, dict) else None
                 if k_history is not None and (batch_idx%10 == 0):
-                    imgdir = outdir / "images"
-                    imgdir.mkdir(exist_ok=True)
+                    imgdir1 = outdir / "images_avg"
+                    imgdir1.mkdir(exist_ok=True)
                     fig = plot_k_matrix_history(
                         k_history,
                         max_diffusion_level=self.algo.sampling_timesteps,
                         title=f"epoch_{epoch}_batch_{batch_idx}",
-                        path=str(imgdir)
+                        path=str(imgdir1)
                     )
                     plt.close(fig)
+
+                    imgdir2 = outdir / "images_dist"
+                    imgdir2.mkdir(exist_ok=True)
+                    fig = plot_k_matrix_distribution_gif(
+                        k_history,
+                        max_diffusion_level=self.algo.sampling_timesteps,
+                        title=f"epoch_{epoch}_batch_{batch_idx}",
+                        path=str(imgdir2)
+                    )
+                    break
 
             print("Train")
             print(f"End of epoch {epoch} avg MSE loss: ", sum(epoch_loss)/len(epoch_loss))
             print(f"End of epoch {epoch} avg total policy loss: ", sum(epoch_tot_loss)/len(epoch_tot_loss))
-
-            # epoch level
-            append_row_to_csv(
-                train_csv,
-                {
-                    "epoch": epoch,
-                    "step": self.train_k_global_step,
-                    "split": "train_epoch",
-                    # "crps": sum(epoch_crps)/len(epoch_crps),
-                    "mse_loss": sum(epoch_loss)/len(epoch_loss),
-                    "policy_loss": sum(epoch_tot_loss)/len(epoch_tot_loss),
-                }
-            )
+            epoch_loss_per_step = torch.stack(epoch_loss_per_step).mean(0)
 
             epoch_crps = []
             epoch_loss =  []
             epoch_tot_loss = []
+            epoch_loss_per_step = []
             for batch_idx, batch in enumerate(val_dataloader):
                 out = self.algo.validate_k_step_multiple_densified(batch, batch_idx)
                 mse_val   = out["loss"].detach().cpu().item()
                 crps_val  = out["crps"]
                 pol_val   = out["total_loss"].detach().cpu().item()
+                per_step_loss = out["per_step_loss"]
 
                 epoch_crps.append(crps_val)
                 epoch_loss.append(mse_val)
                 epoch_tot_loss.append(pol_val)
+                epoch_loss_per_step.append(per_step_loss)
 
             print("Val")
             print(f"End of epoch {epoch} CRPS score: ", sum(epoch_crps)/len(epoch_crps))
@@ -397,6 +409,7 @@ class BaseLightningExperiment(BaseExperiment):
             print(f"End of epoch {epoch} total policy loss: ", sum(epoch_tot_loss)/len(epoch_tot_loss))
             print()
 
+            # epoch level only
             append_row_to_csv(
                 val_csv,
                 {
@@ -408,6 +421,11 @@ class BaseLightningExperiment(BaseExperiment):
                     "policy_loss": sum(epoch_tot_loss)/len(epoch_tot_loss),
                 }
             )
+            epoch_loss_per_step = torch.stack(epoch_loss_per_step).mean(0)
+            append_row_to_csv(
+                val_step_csv,
+                {f"step_{k}":epoch_loss_per_step[k].item()  for k in range(len(epoch_loss_per_step))}
+            )
 
             # change any parameters?
             if self.multiply_denoise_bonus > 0:
@@ -417,15 +435,18 @@ class BaseLightningExperiment(BaseExperiment):
         test_crps = []
         test_loss =  []
         test_tot_loss = []
+        test_per_step_loss = []
         for batch_idx, batch in enumerate(test_dataloader):
             out = self.algo.test_k_step_multiple_densified(batch, batch_idx)
             mse_val   = out["loss"].detach().cpu().item()
             crps_val  = out["crps"]
             pol_val   = out["total_loss"].detach().cpu().item()
+            per_step_loss = out["per_step_loss"]
 
             test_crps.append(crps_val)
             test_loss.append(mse_val)
             test_tot_loss.append(pol_val)
+            test_per_step_loss.append(per_step_loss)
 
         print("Test")
         print("End CRPS score: ", sum(epoch_crps)/len(epoch_crps))
@@ -444,6 +465,12 @@ class BaseLightningExperiment(BaseExperiment):
                 "mse_loss": mse_val,
                 "policy_loss": pol_val,
             }
+        )
+
+        test_loss_per_step = torch.stack(test_per_step_loss).mean(0)
+        append_row_to_csv(
+            test_step_csv,
+            {f"step_{k}":test_loss_per_step[k].item()  for k in range(len(test_loss_per_step))}
         )
 
     def _build_dataset(self, split: str) -> Optional[torch.utils.data.Dataset]:
