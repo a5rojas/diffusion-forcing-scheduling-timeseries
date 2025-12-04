@@ -46,7 +46,7 @@ The choice of the reward function was a complex design space. While we first con
 
 ### Action-Based Configs
 
-Typical pyramidal Diffuson Forcing inference can be interpreted as taking (deterministic) noise-delta actions $a \in  \mathcal{A} = \{0,1 \}$ -- where tokens not getting yet denoised are given $a=0$, while tokens in the midst of the pyramid step down one level with $a=1$. In our approach, we call this setting
+Typical pyramidal Diffuson Forcing inference can be interpreted as taking (deterministic) noise-delta actions $a \in  \mathcal{A} = {0,1  }$ -- where tokens not getting yet denoised are given $a=0$, while tokens in the midst of the pyramid step down one level with $a=1$. In our approach, we call this setting
 
 - `algorithm.training_schedule_matrix.positive_only=True algorithm.training_schedule_matrix.actions=2`
 
