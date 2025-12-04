@@ -51,7 +51,7 @@ BASE_OVERRIDES = [
     "algorithm.schedule_matrix.entropy_beta=0.05",
 
     # Training config
-    "experiment.training_schedule_matrix.epochs=10",
+    "experiment.training_schedule_matrix.epochs=5",
     "experiment.training_schedule_matrix.train_batch_size=512",
 ]
 
@@ -73,37 +73,37 @@ EXPERIMENTS = [
     # Stage A: GAE lambda sweep
     # =========================
     {
-        "name": "gae_lambda0.80_v0.5_beta0.05",
+        "name": "lam0.80_v0.5_beta0.05",
         "cuda": "7",
         "overrides": [
-            "algorithm.schedule_matrix.gae_lambda=0.80",
+            "algorithm.schedule_matrix.lam=0.80",
             "algorithm.schedule_matrix.value_coef=0.5",
             "algorithm.schedule_matrix.entropy_beta=0.05",
         ],
     },
     {
-        "name": "gae_lambda0.90_v0.5_beta0.05",
+        "name": "lam0.90_v0.5_beta0.05",
         "cuda": "7",
         "overrides": [
-            "algorithm.schedule_matrix.gae_lambda=0.90",
+            "algorithm.schedule_matrix.lam=0.90",
             "algorithm.schedule_matrix.value_coef=0.5",
             "algorithm.schedule_matrix.entropy_beta=0.05",
         ],
     },
     {
-        "name": "gae_lambda0.95_v0.5_beta0.05",
+        "name": "lam0.95_v0.5_beta0.05",
         "cuda": "7",
         "overrides": [
-            "algorithm.schedule_matrix.gae_lambda=0.95",
+            "algorithm.schedule_matrix.lam=0.95",
             "algorithm.schedule_matrix.value_coef=0.5",
             "algorithm.schedule_matrix.entropy_beta=0.05",
         ],
     },
     {
-        "name": "gae_lambda0.99_v0.5_beta0.05",
+        "name": "lam0.99_v0.5_beta0.05",
         "cuda": "7",
         "overrides": [
-            "algorithm.schedule_matrix.gae_lambda=0.99",
+            "algorithm.schedule_matrix.lam=0.99",
             "algorithm.schedule_matrix.value_coef=0.5",
             "algorithm.schedule_matrix.entropy_beta=0.05",
         ],
@@ -114,28 +114,28 @@ EXPERIMENTS = [
     # (around lambda = 0.95)
     # ==============================
     {
-        "name": "gae_lambda0.95_v0.10_beta0.05",
+        "name": "lam0.95_v0.10_beta0.05",
         "cuda": "7",
         "overrides": [
-            "algorithm.schedule_matrix.gae_lambda=0.95",
+            "algorithm.schedule_matrix.lam=0.95",
             "algorithm.schedule_matrix.value_coef=0.10",
             "algorithm.schedule_matrix.entropy_beta=0.05",
         ],
     },
     {
-        "name": "gae_lambda0.95_v0.50_beta0.05",
+        "name": "lam0.95_v0.50_beta0.05",
         "cuda": "7",
         "overrides": [
-            "algorithm.schedule_matrix.gae_lambda=0.95",
+            "algorithm.schedule_matrix.lam=0.95",
             "algorithm.schedule_matrix.value_coef=0.50",
             "algorithm.schedule_matrix.entropy_beta=0.05",
         ],
     },
     {
-        "name": "gae_lambda0.95_v1.00_beta0.05",
+        "name": "lam0.95_v1.00_beta0.05",
         "cuda": "7",
         "overrides": [
-            "algorithm.schedule_matrix.gae_lambda=0.95",
+            "algorithm.schedule_matrix.lam=0.95",
             "algorithm.schedule_matrix.value_coef=1.00",
             "algorithm.schedule_matrix.entropy_beta=0.05",
         ],
@@ -146,28 +146,28 @@ EXPERIMENTS = [
     # (lambda = 0.95, v = 0.5)
     # ==========================
     {
-        "name": "gae_lambda0.95_v0.5_beta0.01",
+        "name": "lam0.95_v0.5_beta0.01",
         "cuda": "7",
         "overrides": [
-            "algorithm.schedule_matrix.gae_lambda=0.95",
+            "algorithm.schedule_matrix.lam=0.95",
             "algorithm.schedule_matrix.value_coef=0.5",
             "algorithm.schedule_matrix.entropy_beta=0.01",
         ],
     },
     {
-        "name": "gae_lambda0.95_v0.5_beta0.05",
+        "name": "lam0.95_v0.5_beta0.05",
         "cuda": "7",
         "overrides": [
-            "algorithm.schedule_matrix.gae_lambda=0.95",
+            "algorithm.schedule_matrix.lam=0.95",
             "algorithm.schedule_matrix.value_coef=0.5",
             "algorithm.schedule_matrix.entropy_beta=0.05",
         ],
     },
     {
-        "name": "gae_lambda0.95_v0.5_beta0.10",
+        "name": "lam0.95_v0.5_beta0.10",
         "cuda": "7",
         "overrides": [
-            "algorithm.schedule_matrix.gae_lambda=0.95",
+            "algorithm.schedule_matrix.lam=0.95",
             "algorithm.schedule_matrix.value_coef=0.5",
             "algorithm.schedule_matrix.entropy_beta=0.10",
         ],
