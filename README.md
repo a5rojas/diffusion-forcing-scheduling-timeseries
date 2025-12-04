@@ -30,7 +30,7 @@ Train model with command:
 
 For any other dataset (ts_electricity, etc.) we just change name and dataset in this command. We can evaluate and test models with the pyramidal denoising schedule using the command (for example with 20 diffusion sampling steps):  
 
-`python -m main +name=ts_exchange dataset=ts_exchange algorithm=df_prediction experiment=exp_prediction experiment.tasks=["validation", "test"] algorithm.diffusion.sampling_steps=20`
+`python -m main +name=ts_exchange dataset=ts_exchange algorithm=df_prediction experiment=exp_prediction experiment.tasks=["validation", "test"] algorithm.diffusion.sampling_steps=20 load="checkpoint_path.ckpt"` given we had saved the training run in `"checkpoint_path.ckpt"`. These training runs are also used in our RL part.
 
 ## Training RL Denoisers
 
