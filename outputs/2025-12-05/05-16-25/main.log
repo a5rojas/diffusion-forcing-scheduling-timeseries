@@ -1,0 +1,11 @@
+[2025-12-05 05:16:30,304][torch.distributed.nn.jit.instantiator][INFO] - Created a temporary directory at /tmp/tmpf42u3a0o
+[2025-12-05 05:16:30,305][torch.distributed.nn.jit.instantiator][INFO] - Writing /tmp/tmpf42u3a0o/_remote_module_non_scriptable.py
+[2025-12-05 05:16:31,453][root][INFO] - using dataset already processed in path /home/ubuntu/.gluonts/datasets/exchange_rate_nips.
+[2025-12-05 05:16:31,477][root][INFO] - first/last timestamp found: 1990-01-01/2013-04-08
+[2025-12-05 05:16:31,477][root][INFO] - group training time series to datasets
+[2025-12-05 05:16:31,507][root][INFO] - using dataset already processed in path /home/ubuntu/.gluonts/datasets/exchange_rate_nips.
+[2025-12-05 05:16:31,530][root][INFO] - first/last timestamp found: 1990-01-01/2013-04-08
+[2025-12-05 05:16:31,530][root][INFO] - group training time series to datasets
+[2025-12-05 05:16:31,559][root][INFO] - using dataset already processed in path /home/ubuntu/.gluonts/datasets/exchange_rate_nips.
+[2025-12-05 05:16:31,671][root][INFO] - first/last timestamp found: 1990-01-01/2013-11-04
+[2025-12-05 05:16:31,671][root][INFO] - group test time series to datasets

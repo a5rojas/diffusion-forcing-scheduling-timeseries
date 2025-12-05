@@ -1,0 +1,2 @@
+epoch,step,batch_idx,split,crps,mse_loss,policy_loss
+final,300,0,test,0.06026777625083923,0.4597552418708801,-0.11062267422676086
