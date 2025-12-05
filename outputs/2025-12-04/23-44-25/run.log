@@ -1,0 +1,140 @@
+/home/ubuntu/miniconda3/envs/diffusion_forcing/lib/python3.10/site-packages/hydra/_internal/defaults_list.py:251: UserWarning: In 'config': Defaults list is missing `_self_`. See https://hydra.cc/docs/1.2/upgrades/1.0_to_1.1/default_composition_order for more information
+  warnings.warn(msg, UserWarning)
+/home/ubuntu/miniconda3/envs/diffusion_forcing/lib/python3.10/site-packages/lightning/fabric/__init__.py:40: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+[2025-12-04 23:44:31,816][torch.distributed.nn.jit.instantiator][INFO] - Created a temporary directory at /tmp/tmpqrfxniwg
+[2025-12-04 23:44:31,816][torch.distributed.nn.jit.instantiator][INFO] - Writing /tmp/tmpqrfxniwg/_remote_module_non_scriptable.py
+Loaded algorithm weights from: outputs/2025-11-07/05-10-26/checkpoints/epoch=13-step=1400.ckpt
+[2025-12-04 23:44:33,310][root][INFO] - using dataset already processed in path /home/ubuntu/.gluonts/datasets/exchange_rate_nips.
+[2025-12-04 23:44:33,334][root][INFO] - first/last timestamp found: 1990-01-01/2013-04-08
+[2025-12-04 23:44:33,335][root][INFO] - group training time series to datasets
+[2025-12-04 23:44:33,365][root][INFO] - using dataset already processed in path /home/ubuntu/.gluonts/datasets/exchange_rate_nips.
+[2025-12-04 23:44:33,385][root][INFO] - first/last timestamp found: 1990-01-01/2013-04-08
+[2025-12-04 23:44:33,385][root][INFO] - group training time series to datasets
+/home/ubuntu/diffusion-forcing-scheduling-timeseries/datasets/timeseries/gluonts_dataset.py:206: FutureWarning: Period with BDay freq is deprecated and will be removed in a future version. Use a DatetimeIndex with BDay freq instead.
+  "start": data[0]["start"] + get_time_delta(start),
+[2025-12-04 23:44:33,414][root][INFO] - using dataset already processed in path /home/ubuntu/.gluonts/datasets/exchange_rate_nips.
+[2025-12-04 23:44:33,516][root][INFO] - first/last timestamp found: 1990-01-01/2013-11-04
+[2025-12-04 23:44:33,516][root][INFO] - group test time series to datasets
+Will run 3 epochs
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_0_batch_0.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_0_batch_0.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_0_batch_0.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_0_batch_10.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_0_batch_10.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_0_batch_10.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_0_batch_20.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_0_batch_20.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_0_batch_20.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_0_batch_30.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_0_batch_30.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_0_batch_30.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_0_batch_40.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_0_batch_40.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_0_batch_40.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_0_batch_50.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_0_batch_50.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_0_batch_50.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_0_batch_60.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_0_batch_60.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_0_batch_60.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_0_batch_70.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_0_batch_70.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_0_batch_70.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_0_batch_80.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_0_batch_80.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_0_batch_80.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_0_batch_90.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_0_batch_90.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_0_batch_90.png
+Train
+End of epoch 0 avg MSE loss:  0.04313346341252327
+End of epoch 0 avg total policy loss:  0.28400695718824864
+Val
+End of epoch 0 CRPS score:  0.057788651436567307
+End of epoch 0 MSE loss:  0.02832403965294361
+End of epoch 0 total policy loss:  0.11503821611404419
+
+Multiply denoise bonus
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_1_batch_0.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_1_batch_0.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_1_batch_0.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_1_batch_10.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_1_batch_10.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_1_batch_10.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_1_batch_20.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_1_batch_20.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_1_batch_20.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_1_batch_30.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_1_batch_30.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_1_batch_30.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_1_batch_40.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_1_batch_40.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_1_batch_40.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_1_batch_50.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_1_batch_50.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_1_batch_50.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_1_batch_60.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_1_batch_60.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_1_batch_60.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_1_batch_70.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_1_batch_70.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_1_batch_70.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_1_batch_80.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_1_batch_80.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_1_batch_80.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_1_batch_90.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_1_batch_90.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_1_batch_90.png
+Train
+End of epoch 1 avg MSE loss:  0.03099012954160571
+End of epoch 1 avg total policy loss:  0.08840149678289891
+Val
+End of epoch 1 CRPS score:  0.05666615813970566
+End of epoch 1 MSE loss:  0.028093205764889717
+End of epoch 1 total policy loss:  0.06955923140048981
+
+Multiply denoise bonus
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_2_batch_0.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_2_batch_0.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_2_batch_0.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_2_batch_10.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_2_batch_10.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_2_batch_10.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_2_batch_20.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_2_batch_20.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_2_batch_20.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_2_batch_30.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_2_batch_30.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_2_batch_30.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_2_batch_40.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_2_batch_40.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_2_batch_40.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_2_batch_50.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_2_batch_50.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_2_batch_50.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_2_batch_60.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_2_batch_60.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_2_batch_60.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_2_batch_70.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_2_batch_70.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_2_batch_70.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_2_batch_80.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_2_batch_80.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_2_batch_80.png
+saved a fig in  /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_avg/epoch_2_batch_90.png
+Saved GIF to /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_dist/epoch_2_batch_90.gif
+Saved renoise-frequency heatmap to: /home/ubuntu/diffusion-forcing-scheduling-timeseries/outputs/2025-12-04/23-44-25/images_renoise_freq/renoise_freq_epoch_2_batch_90.png
+Train
+End of epoch 2 avg MSE loss:  0.030992701556533574
+End of epoch 2 avg total policy loss:  0.06774920374155044
+Val
+End of epoch 2 CRPS score:  0.05993851274251938
+End of epoch 2 MSE loss:  0.028822196647524834
+End of epoch 2 total policy loss:  0.06324044615030289
+
+Multiply denoise bonus
+Test
+End CRPS score:  0.05993851274251938
+End MSE loss:  0.028822196647524834
+End total policy loss:  0.06324044615030289
+
