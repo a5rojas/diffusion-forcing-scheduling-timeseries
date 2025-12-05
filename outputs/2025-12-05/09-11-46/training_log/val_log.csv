@@ -1,0 +1,2 @@
+epoch,step,split,crps,mse_loss,policy_loss
+0,100,val_epoch,0.04241790249943733,0.02789713256061077,-0.026316329836845398
